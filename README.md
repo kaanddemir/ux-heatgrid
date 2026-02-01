@@ -41,6 +41,8 @@ UX HeatGrid is built with a **Privacy-First** philosophy:
 *   **No Tracking:** We do not collect browsing history, personal data, or usage metrics.
 *   **No External Requests:** The extension never communicates with external servers.
 
+See our [Privacy Policy](PRIVACY_POLICY.md) for more details.
+
 ## Tech Stack
 *   **Core:** HTML5, CSS3, Modern JavaScript (ES6+)
 *   **Architecture:** Chrome Extension Manifest V3
