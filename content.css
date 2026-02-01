@@ -1,0 +1,22 @@
+/**
+ * DOM Heatmap - Canvas Styles
+ */
+
+#dom-heatmap-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 999999;
+    mix-blend-mode: normal;
+    filter: blur(6px);
+    opacity: 0.7;
+}
+
+/* Dark mode adjustment */
+@media (prefers-color-scheme: dark) {
+    #dom-heatmap-canvas {
+        mix-blend-mode: screen;
+        opacity: 0.85;
+    }
+}
