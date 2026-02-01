@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "UX HeatGrid",
     "version": "1.0.0",
-    "description": "Real-time UX heatmap and attention analysis using a smart grid-based layout model. Understand content density, layout balance, and user focus instantly.",
+    "description": "Real-time UX heatmap and attention analysis to visualize user focus and layout balance.",
     "permissions": [
         "activeTab",
         "scripting"
