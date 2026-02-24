@@ -74,7 +74,7 @@ async function init() {
       }
     } catch (e) {
       // Content script might not be injected yet
-      console.log('Extensions not ready or connection failed');
+      // Content script not injected yet
     }
   }
 }
@@ -479,7 +479,7 @@ pinBtn.addEventListener('click', async () => {
         action: isPinned ? 'pinPanel' : 'unpinPanel'
       });
     } catch (e) {
-      console.log('Pin panel error:', e);
+      // Silent fail
     }
   });
 });
