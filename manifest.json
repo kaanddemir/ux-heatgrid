@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "UX HeatGrid",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Real-time UX heatmap and attention analysis to visualize user focus and layout balance.",
     "permissions": [
         "activeTab",
