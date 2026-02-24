@@ -629,13 +629,13 @@
             positives.push({ category: 'Density', message: `Content density is ideal (${Math.round(density)}%)` });
         } else if (densityPts >= 12) {
             sugCountBefore = suggestions.length;
-            if (overallDensityScore < 70) suggestions.push({ category: 'Density', message: `Content density is ${Math.round(density)}% (ideal 15–45%)` });
-            if (foldDensityScore < 70) suggestions.push({ category: 'Density', message: `First screen density is ${Math.round(foldDensity)}% (ideal 15–50%)` });
+            if (overallDensityScore < 70) suggestions.push({ category: 'Density', message: `Content density is ${Math.round(density)}% (ideal 10–55%)` });
+            if (foldDensityScore < 70) suggestions.push({ category: 'Density', message: `First screen density is ${Math.round(foldDensity)}% (ideal 10–60%)` });
             if (consistencyScore < 70) suggestions.push({ category: 'Density', message: 'Content distribution could be more even' });
             if (suggestions.length === sugCountBefore) suggestions.push({ category: 'Density', message: `Density is okay at ${Math.round(density)}% but could improve` });
         } else {
-            if (overallDensityScore < 40) issues.push({ category: 'Density', message: density > 45 ? `Too dense at ${Math.round(density)}% (recommend under 45%)` : `Very sparse at ${Math.round(density)}% (recommend 15%+)` });
-            if (foldDensityScore < 40) issues.push({ category: 'Density', message: foldDensity > 50 ? `First screen is crowded (${Math.round(foldDensity)}%)` : `First screen lacks content (${Math.round(foldDensity)}%)` });
+            if (overallDensityScore < 40) issues.push({ category: 'Density', message: density > 55 ? `Too dense at ${Math.round(density)}% (recommend under 55%)` : `Very sparse at ${Math.round(density)}% (recommend 10%+)` });
+            if (foldDensityScore < 40) issues.push({ category: 'Density', message: foldDensity > 60 ? `First screen is crowded (${Math.round(foldDensity)}%)` : `First screen lacks content (${Math.round(foldDensity)}%)` });
             if (consistencyScore < 40) issues.push({ category: 'Density', message: 'Uneven content distribution across page' });
         }
 
@@ -643,18 +643,18 @@
         if (wsPts >= 20) {
             positives.push({ category: 'Spacing', message: `Good spacing (avg ${Math.round(avgGap)}px gap)` });
         } else if (wsPts >= 12) {
-            suggestions.push({ category: 'Spacing', message: `Avg gap is ${Math.round(avgGap)}px (recommend 24–48px)` });
+            suggestions.push({ category: 'Spacing', message: `Avg gap is ${Math.round(avgGap)}px (recommend 12–48px)` });
         } else {
-            issues.push({ category: 'Spacing', message: `Elements too cramped (avg ${Math.round(avgGap)}px gap, recommend 24px+)` });
+            issues.push({ category: 'Spacing', message: `Elements too cramped (avg ${Math.round(avgGap)}px gap, recommend 12px+)` });
         }
 
         // Complexity feedback
         if (layoutPts >= 20) {
             positives.push({ category: 'Complexity', message: `Optimal complexity (${Math.round(eps)} items/screen)` });
         } else if (layoutPts >= 12) {
-            suggestions.push({ category: 'Complexity', message: `${Math.round(eps)} items/screen (ideal 8–15)` });
+            suggestions.push({ category: 'Complexity', message: `${Math.round(eps)} items/screen (ideal 5–25)` });
         } else {
-            issues.push({ category: 'Complexity', message: eps > 15 ? `Too complex (${Math.round(eps)} items/screen, recommend under 15)` : `Very few elements (${Math.round(eps)} items/screen)` });
+            issues.push({ category: 'Complexity', message: eps > 25 ? `Too complex (${Math.round(eps)} items/screen, recommend under 25)` : `Very few elements (${Math.round(eps)} items/screen)` });
         }
 
         // Readability feedback
@@ -663,14 +663,14 @@
         } else if (readPts >= 12) {
             sugCountBefore = suggestions.length;
             if (fontSizeScore < 70) suggestions.push({ category: 'Readability', message: `Avg font size is ${Math.round(avgFS)}px (recommend 16px)` });
-            if (lineHeightScore < 70) suggestions.push({ category: 'Readability', message: `Line height ratio is ${avgLH.toFixed(1)}× (ideal 1.4–1.8×)` });
-            if (lineLengthScore < 70) suggestions.push({ category: 'Readability', message: `Avg ${Math.round(avgLL)} chars/line (ideal 45–75)` });
+            if (lineHeightScore < 70) suggestions.push({ category: 'Readability', message: `Line height ratio is ${avgLH.toFixed(1)}× (ideal 1.2–2.0×)` });
+            if (lineLengthScore < 70) suggestions.push({ category: 'Readability', message: `Avg ${Math.round(avgLL)} chars/line (ideal 35–90)` });
             if (avgCR !== null && contrastScore < 70) suggestions.push({ category: 'Readability', message: `Contrast ratio is ${avgCR.toFixed(1)}:1 (recommend 4.5:1+)` });
             if (suggestions.length === sugCountBefore) suggestions.push({ category: 'Readability', message: `Readability is decent (${readability}%) but has room to improve` });
         } else {
-            if (fontSizeScore < 50) issues.push({ category: 'Readability', message: `Font too small (avg ${Math.round(avgFS)}px, recommend 16px)` });
-            if (lineHeightScore < 50) issues.push({ category: 'Readability', message: `Line spacing too tight (${avgLH.toFixed(1)}×, recommend 1.4×+)` });
-            if (lineLengthScore < 50) issues.push({ category: 'Readability', message: avgLL > 75 ? `Lines too wide (${Math.round(avgLL)} chars, max 75)` : `Lines too narrow (${Math.round(avgLL)} chars, min 45)` });
+            if (fontSizeScore < 50) issues.push({ category: 'Readability', message: `Font too small (avg ${Math.round(avgFS)}px, recommend 14px+)` });
+            if (lineHeightScore < 50) issues.push({ category: 'Readability', message: `Line spacing too tight (${avgLH.toFixed(1)}×, recommend 1.2×+)` });
+            if (lineLengthScore < 50) issues.push({ category: 'Readability', message: avgLL > 90 ? `Lines too wide (${Math.round(avgLL)} chars, max 90)` : `Lines too narrow (${Math.round(avgLL)} chars, min 35)` });
             if (contrastScore < 50) issues.push({ category: 'Readability', message: avgCR !== null ? `Low contrast (${avgCR.toFixed(1)}:1, need 4.5:1)` : 'Low text-background contrast' });
         }
 
