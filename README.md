@@ -148,7 +148,7 @@ See our [Privacy Policy](PRIVACY_POLICY.md) for the full policy.
 ## Installation
 
 ### From Chrome Web Store
-[Available on the Chrome Web Store](https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn)
+[Install UX HeatGrid](https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn)
 
 ### Manual Installation (Developer Mode)
 1.  **Clone** this repository.
