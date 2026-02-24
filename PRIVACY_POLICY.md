@@ -1,5 +1,5 @@
 # Privacy Policy
-Last Updated: February 1, 2026
+Last Updated: February 24, 2026
 
 ## UX HeatGrid Chrome Extension
 

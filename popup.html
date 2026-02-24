@@ -14,7 +14,17 @@
             <div class="logo">
                 <h1>UX HeatGrid</h1>
             </div>
-            <span class="version">v1.0.0</span>
+            <div class="header-right">
+                <span class="version">v1.1.0</span>
+                <button class="help-btn" id="helpBtn" title="How it works">
+                    <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </button>
+            </div>
         </header>
 
         <div class="status-card" id="statusCard">
@@ -28,7 +38,7 @@
                             fill="transparent" r="52" cx="60" cy="60" />
                     </svg>
                     <div class="loader-text">
-                        <span id="countdownValue">15</span>
+                        <span id="countdownValue">10</span>
                         <small>Analyzing</small>
                     </div>
                 </div>
@@ -72,23 +82,34 @@
         <div class="analytics" id="analyticsSection">
             <div class="analytics-header">
                 <h3 class="section-title">UX Analysis</h3>
-                <button class="details-link" id="detailsBtn" disabled>Insights</button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="details-link pin-btn" id="pinBtn" title="Pin to page">
+                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2.5"
+                            fill="none" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 17v5" />
+                            <path
+                                d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+                        </svg>
+                    </button>
+                    <button class="details-link" id="detailsBtn" disabled>Review</button>
+                </div>
             </div>
             <div class="stats-grid">
-                <!-- Active Time -->
+                <!-- Readability -->
                 <div class="stat-card">
                     <div class="stat-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
                             fill="none" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"></circle>
-                            <polyline points="12 6 12 12 16 14"></polyline>
+                            <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                            <line x1="9" y1="20" x2="15" y2="20"></line>
+                            <line x1="12" y1="4" x2="12" y2="20"></line>
                         </svg>
                     </div>
-                    <div class="stat-value" id="statActiveTime">0s</div>
-                    <div class="stat-label">Active Time</div>
+                    <div class="stat-value" id="statReadability">-%</div>
+                    <div class="stat-label">Readability</div>
                 </div>
 
-                <!-- Elements/Screen -->
+                <!-- Complexity -->
                 <div class="stat-card">
                     <div class="stat-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
@@ -102,7 +123,7 @@
                         </svg>
                     </div>
                     <div class="stat-value" id="statElementsScreen">-</div>
-                    <div class="stat-label">Elements/Screen</div>
+                    <div class="stat-label">Complexity</div>
                 </div>
 
                 <!-- White Space -->
@@ -117,7 +138,7 @@
                     <div class="stat-label">White Space</div>
                 </div>
 
-                <!-- Text Density -->
+                <!-- Content Density -->
                 <div class="stat-card">
                     <div class="stat-icon">
                         <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2"
@@ -128,7 +149,7 @@
                         </svg>
                     </div>
                     <div class="stat-value" id="statTextDensity">-%</div>
-                    <div class="stat-label">Text Density</div>
+                    <div class="stat-label">Content Density</div>
                 </div>
 
             </div>
@@ -148,24 +169,326 @@
     <div class="modal-overlay" id="modalOverlay">
         <div class="modal-card">
             <div class="modal-header">
-                <h3>UX Insights</h3>
+                <h3>UX Review</h3>
                 <button class="close-modal" id="closeModalBtn">&times;</button>
             </div>
             <div class="modal-legend">
-                <span class="category-tag tag-content">Content</span>
-                <span class="category-tag tag-layout">Layout</span>
-                <span class="category-tag tag-interactions">Interactions</span>
+                <span class="category-tag tag-density">Density</span>
+                <span class="category-tag tag-spacing">Spacing</span>
+                <span class="category-tag tag-complexity">Complexity</span>
+                <span class="category-tag tag-readability">Readability</span>
                 <span class="category-tag tag-structure">Structure</span>
             </div>
             <div class="modal-content">
                 <div class="detail-section">
-                    <h4>Insights</h4>
+                    <h4>
+                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="#10b981" stroke-width="3" fill="none">
+                            <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                        Strengths
+                    </h4>
                     <div id="fullPositiveFeedback"></div>
                 </div>
                 <div class="detail-section">
-                    <h4>Issues</h4>
+                    <h4>
+                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="#f59e0b" stroke-width="2" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M9 18h6" />
+                            <path d="M10 22h4" />
+                            <path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z" />
+                        </svg>
+                        Suggestions
+                    </h4>
+                    <div id="fullSuggestionFeedback"></div>
+                </div>
+                <div class="detail-section">
+                    <h4>
+                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="#ef4444" stroke-width="2.5" fill="none"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z">
+                            </path>
+                            <line x1="12" y1="9" x2="12" y2="13"></line>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                        Issues
+                    </h4>
                     <div id="fullNegativeFeedback"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Documentation Modal -->
+    <div class="modal-overlay" id="helpModalOverlay">
+        <div class="modal-card help-modal-card">
+            <div class="modal-header">
+                <h3>How It Works</h3>
+                <button class="close-modal" id="closeHelpBtn">&times;</button>
+            </div>
+            <div class="modal-content help-content">
+
+                <!-- UX Score -->
+                <div class="help-accordion-item">
+                    <button class="help-accordion-header">
+                        <div class="help-accordion-title">
+                            <div class="help-icon-circle score-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
+                                    fill="none">
+                                    <path d="M12 20V10" />
+                                    <path d="M18 20V4" />
+                                    <path d="M6 20v-4" />
+                                </svg>
+                            </div>
+                            <h4>UX Score</h4>
+                        </div>
+                        <svg class="accordion-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+                            stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="help-accordion-content">
+                        <div class="help-accordion-body">
+                            <p>Score is built from <strong>4 categories</strong>, each worth 25 points:</p>
+                            <div class="help-rules">
+                                <div class="help-rule">
+                                    <span class="rule-penalty">25</span>
+                                    <span>Content Density (overall + first screen + consistency)</span>
+                                </div>
+                                <div class="help-rule">
+                                    <span class="rule-penalty">25</span>
+                                    <span>White Space (real element gaps)</span>
+                                </div>
+                                <div class="help-rule">
+                                    <span class="rule-penalty">25</span>
+                                    <span>Complexity (items per screen)</span>
+                                </div>
+                                <div class="help-rule">
+                                    <span class="rule-penalty">25</span>
+                                    <span>Readability (font, spacing, contrast)</span>
+                                </div>
+                            </div>
+                            <div class="help-grades">
+                                <span class="grade-pill fatiguing">&lt;40 Bad</span>
+                                <span class="grade-pill dense">40+ Dense</span>
+                                <span class="grade-pill average">55+ Okay</span>
+                                <span class="grade-pill good">70+ Good</span>
+                                <span class="grade-pill excellent">85+ Great</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Heatmap Engine -->
+                <div class="help-accordion-item">
+                    <button class="help-accordion-header">
+                        <div class="help-accordion-title">
+                            <div class="help-icon-circle heatmap-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
+                                    fill="none">
+                                    <rect x="3" y="3" width="7" height="7" />
+                                    <rect x="14" y="3" width="7" height="7" />
+                                    <rect x="14" y="14" width="7" height="7" />
+                                    <rect x="3" y="14" width="7" height="7" />
+                                </svg>
+                            </div>
+                            <h4>Heatmap Engine</h4>
+                        </div>
+                        <svg class="accordion-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+                            stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="help-accordion-content">
+                        <div class="help-accordion-body">
+                            <p>Tracks attention using 3 simple signals:</p>
+                            <div class="help-signals">
+                                <div class="help-signal">
+                                    <div class="signal-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+                                            <path d="M13 13l6 6" />
+                                        </svg>
+                                        <strong>Mouse Proximity</strong>
+                                    </div>
+                                    <p>Follows cursor movements closely.</p>
+                                </div>
+                                <div class="help-signal">
+                                    <div class="signal-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        <strong>Dwell Time</strong>
+                                    </div>
+                                    <p>Increases when looking. Hovers double it.</p>
+                                </div>
+                                <div class="help-signal">
+                                    <div class="signal-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <polyline points="17 1 21 5 17 9" />
+                                            <path d="M3 11V9a4 4 0 014-4h14" />
+                                            <polyline points="7 23 3 19 7 15" />
+                                            <path d="M21 13v2a4 4 0 01-4 4H3" />
+                                        </svg>
+                                        <strong>Scroll Speed</strong>
+                                    </div>
+                                    <p>Fast scrolling lowers the tracking score.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Element Priority -->
+                <div class="help-accordion-item">
+                    <button class="help-accordion-header">
+                        <div class="help-accordion-title">
+                            <div class="help-icon-circle priority-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
+                                    fill="none">
+                                    <polygon
+                                        points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                                </svg>
+                            </div>
+                            <h4>Element Priority</h4>
+                        </div>
+                        <svg class="accordion-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+                            stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="help-accordion-content">
+                        <div class="help-accordion-body">
+                            <p>Items heat up at different speeds based on type:</p>
+                            <div class="help-priority-list">
+                                <div class="priority-row">
+                                    <span class="priority-tag high">High</span>
+                                    <span>Buttons & Links</span>
+                                </div>
+                                <div class="priority-row">
+                                    <span class="priority-tag mid">Med</span>
+                                    <span>Headings & Text</span>
+                                </div>
+                                <div class="priority-row">
+                                    <span class="priority-tag low">Low</span>
+                                    <span>Small Details</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Metrics Explained -->
+                <div class="help-accordion-item">
+                    <button class="help-accordion-header">
+                        <div class="help-accordion-title">
+                            <div class="help-icon-circle metrics-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
+                                    fill="none">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                    <line x1="3" y1="9" x2="21" y2="9" />
+                                    <line x1="9" y1="21" x2="9" y2="9" />
+                                </svg>
+                            </div>
+                            <h4>Metrics Explained</h4>
+                        </div>
+                        <svg class="accordion-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+                            stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="help-accordion-content">
+                        <div class="help-accordion-body">
+                            <div class="help-metrics">
+                                <div class="metric-explain">
+                                    <div class="metric-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <path d="M17 6.1H3M21 12.1H3M15 18.1H3" />
+                                        </svg>
+                                        <strong>Content Density</strong>
+                                    </div>
+                                    <p>Content coverage. Checks overall, first screen, and consistency.</p>
+                                </div>
+                                <div class="metric-explain">
+                                    <div class="metric-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                                            <path d="M3 9h18M9 21V9" />
+                                        </svg>
+                                        <strong>White Space</strong>
+                                    </div>
+                                    <p>Real pixel gaps between elements. Ideal: 20–48px.</p>
+                                </div>
+                                <div class="metric-explain">
+                                    <div class="metric-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z" />
+                                        </svg>
+                                        <strong>Complexity</strong>
+                                    </div>
+                                    <p>Average items per view. Ideal: 8–15.</p>
+                                </div>
+                                <div class="metric-explain">
+                                    <div class="metric-header">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor"
+                                            stroke-width="2" fill="none">
+                                            <polyline points="4 7 4 4 20 4 20 7" />
+                                            <line x1="9" y1="20" x2="15" y2="20" />
+                                            <line x1="12" y1="4" x2="12" y2="20" />
+                                        </svg>
+                                        <strong>Readability</strong>
+                                    </div>
+                                    <p>Font size, line height, line length, and contrast.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Color Scale -->
+                <div class="help-accordion-item">
+                    <button class="help-accordion-header">
+                        <div class="help-accordion-title">
+                            <div class="help-icon-circle color-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2"
+                                    fill="none">
+                                    <circle cx="12" cy="12" r="10" />
+                                </svg>
+                            </div>
+                            <h4>Color Scale</h4>
+                        </div>
+                        <svg class="accordion-chevron" viewBox="0 0 24 24" width="16" height="16" stroke="currentColor"
+                            stroke-width="2" fill="none">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </button>
+                    <div class="help-accordion-content">
+                        <div class="help-accordion-body">
+                            <div class="help-color-scale-grid">
+                                <div class="color-stop">
+                                    <span class="color-dot" style="background: rgb(100, 150, 255)"></span>
+                                    <span>Blue</span>
+                                </div>
+                                <div class="color-stop">
+                                    <span class="color-dot" style="background: rgb(255, 240, 180)"></span>
+                                    <span>Yellow</span>
+                                </div>
+                                <div class="color-stop">
+                                    <span class="color-dot" style="background: rgb(255, 160, 160)"></span>
+                                    <span>Red</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>

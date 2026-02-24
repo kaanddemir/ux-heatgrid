@@ -30,15 +30,18 @@ function setProgress(percent) {
 
 // Modal Elements
 const detailsBtn = document.getElementById('detailsBtn');
+const pinBtn = document.getElementById('pinBtn');
 const modalOverlay = document.getElementById('modalOverlay');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const fullPositiveFeedback = document.getElementById('fullPositiveFeedback');
+const fullSuggestionFeedback = document.getElementById('fullSuggestionFeedback');
 const fullNegativeFeedback = document.getElementById('fullNegativeFeedback');
 
 // State
 let isTracking = false;
 let isPaused = false;
 let isVisible = false;
+let isPinned = false;
 let analyticsUpdateInterval = null;
 
 // Icons
@@ -62,6 +65,11 @@ async function init() {
       if (response) {
         updateUIState(response.isTracking, response.isPaused);
         updateVisibleState(response.isVisible);
+
+        // Sync Pin State
+        isPinned = !!response.isPinned;
+        pinBtn.classList.toggle('active', isPinned);
+
         updateAnalytics(); // Immediate fetch
       }
     } catch (e) {
@@ -81,8 +89,11 @@ function isRestrictedUrl(url) {
 function disableUI() {
   startBtn.disabled = true;
   showBtn.disabled = true;
+  pinBtn.disabled = true;
   startBtn.style.opacity = '0.5';
   startBtn.style.cursor = 'not-allowed';
+  pinBtn.style.opacity = '0.5';
+  pinBtn.style.cursor = 'not-allowed';
 }
 
 // ============================================
@@ -197,13 +208,15 @@ showBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id) return;
 
-  try {
-    const action = isVisible ? 'hideHeatmap' : 'showHeatmap';
-    await chrome.tabs.sendMessage(tab.id, { action });
-    updateVisibleState(!isVisible);
-  } catch (e) {
-    console.error('Failed to toggle visibility', e);
-  }
+  await ensureInjected(tab.id, async () => {
+    try {
+      const action = isVisible ? 'hideHeatmap' : 'showHeatmap';
+      await chrome.tabs.sendMessage(tab.id, { action });
+      updateVisibleState(!isVisible);
+    } catch (e) {
+      console.error('Failed to toggle visibility', e);
+    }
+  });
 });
 
 // CLEAR Button
@@ -251,33 +264,43 @@ modalOverlay.addEventListener('click', (e) => {
 // HELPERS
 // ============================================
 
-async function injectScript(tabId) {
+async function ensureInjected(tabId, callback) {
+  if (!tabId) return;
   try {
-    await chrome.scripting.executeScript({
-      target: { tabId },
-      files: ['content.js']
-    });
-    await chrome.scripting.insertCSS({
-      target: { tabId },
-      files: ['content.css']
-    });
+    // Check if already injected
+    await chrome.tabs.sendMessage(tabId, { action: 'getStatus' });
+    if (callback) await callback();
+  } catch (e) {
+    // Not injected, do it now
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        files: ['content.js']
+      });
+      await chrome.scripting.insertCSS({
+        target: { tabId },
+        files: ['content.css']
+      });
 
-    // Retry Start automatically after injection
-    setTimeout(async () => {
-      try {
-        await chrome.tabs.sendMessage(tabId, { action: 'startTracking' });
-        updateUIState(true, false);
-      } catch (err) {
-        console.error('Retry start failed', err);
-        if (finalScore) {
-          finalScore.textContent = 'Retry Failed';
+      // Wait a bit and retry
+      setTimeout(async () => {
+        try {
+          if (callback) await callback();
+        } catch (err) {
+          console.error('Retry after injection failed', err);
         }
-      }
-    }, 500);
-
-  } catch (err) {
-    console.error('Injection failed', err);
+      }, 500);
+    } catch (err) {
+      console.error('Injection failed', err);
+    }
   }
+}
+
+async function injectScript(tabId) {
+  await ensureInjected(tabId, () => {
+    chrome.tabs.sendMessage(tabId, { action: 'startTracking' });
+    updateUIState(true, false);
+  });
 }
 
 function startAnalyticsUpdates() {
@@ -296,20 +319,21 @@ function stopAnalyticsUpdates() {
 function resetAnalyticsDisplay() {
   analyticsSection.classList.remove('tracking-active');
 
-  document.getElementById('statActiveTime').textContent = '0s';
+  document.getElementById('statReadability').textContent = '-%';
   document.getElementById('statTextDensity').textContent = '-%';
   document.getElementById('statWhiteSpace').textContent = '-%';
   document.getElementById('statElementsScreen').textContent = '-';
 
   detailsBtn.disabled = true;
   fullPositiveFeedback.innerHTML = '';
+  fullSuggestionFeedback.innerHTML = '';
   fullNegativeFeedback.innerHTML = '';
 
   // Reset Score Card to Analysis State
   analysisState.classList.remove('hidden');
   resultState.classList.add('hidden');
   resultState.className = 'status-content hidden'; // Reset grade classes
-  countdownValue.textContent = '15';
+  countdownValue.textContent = '10';
   setProgress(0);
 }
 
@@ -326,7 +350,7 @@ async function updateAnalytics() {
 
       if (analytics) {
         // Display Data
-        document.getElementById('statActiveTime').textContent = analytics.activeTime;
+
 
         // UX Evaluation Metrics
         if (analytics.uxEvaluation) {
@@ -334,6 +358,7 @@ async function updateAnalytics() {
           document.getElementById('statTextDensity').textContent = ux.textDensity + '%';
           document.getElementById('statWhiteSpace').textContent = ux.whiteSpaceRatio + '%';
           document.getElementById('statElementsScreen').textContent = ux.elementsPerScreen;
+          document.getElementById('statReadability').textContent = ux.readability + '%';
 
           // Feedback - Handle Modal Content
           if (analytics.hasData) {
@@ -356,10 +381,20 @@ async function updateAnalytics() {
               </div>
             `).join('');
 
-            if (fullPositiveFeedback.innerHTML === '') fullPositiveFeedback.innerHTML = '<div style="font-size:11px;color:#64748b;padding:10px;">No insights found.</div>';
+            fullSuggestionFeedback.innerHTML = (ux.suggestions || []).map(item => `
+              <div class="modal-item suggestion">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>
+                <span class="category-tag tag-${item.category.toLowerCase()}">${item.category}</span>
+                <span>${item.message}</span>
+              </div>
+            `).join('');
+
+            if (fullPositiveFeedback.innerHTML === '') fullPositiveFeedback.innerHTML = '<div style="font-size:11px;color:#64748b;padding:10px;">No strengths found.</div>';
+            if (fullSuggestionFeedback.innerHTML === '') fullSuggestionFeedback.innerHTML = '<div style="font-size:11px;color:#64748b;padding:10px;">No suggestions.</div>';
             if (fullNegativeFeedback.innerHTML === '') fullNegativeFeedback.innerHTML = '<div style="font-size:11px;color:#64748b;padding:10px;">No issues found.</div>';
           } else {
             detailsBtn.disabled = true;
+            pinBtn.disabled = true;
           }
         }
 
@@ -383,7 +418,7 @@ async function updateAnalytics() {
 }
 
 function updateScoreCard(analytics) {
-  const MIN_ANALYSIS_TIME = 15; // Must match content.js
+  const MIN_ANALYSIS_TIME = 10; // Must match content.js
 
   // 1. ANALYZING STATE (Timer)
   if (!analytics.uxEvaluation || !analytics.hasData) {
@@ -407,7 +442,7 @@ function updateScoreCard(analytics) {
   // 2. RESULT STATE (Score)
   const ux = analytics.uxEvaluation;
   const score = ux.score;
-  const label = ux.label; // Correctly using 'label' from v1.0.0
+  const label = ux.label; // Correctly using 'label' from v1.1.0
 
   // Hide Analysis, Show Result
   analysisState.classList.add('hidden');
@@ -420,13 +455,79 @@ function updateScoreCard(analytics) {
   // Determine Grade Theme
   let gradeClass = 'grade-poor';
   if (score >= 85) gradeClass = 'grade-excellent';
-  else if (score >= 70) gradeClass = 'grade-excellent'; // 85 is strict excellent, 70 is V.Good
-  else if (score >= 55) gradeClass = 'grade-good';
+  else if (score >= 70) gradeClass = 'grade-good';
+  else if (score >= 55) gradeClass = 'grade-average';
   else if (score >= 40) gradeClass = 'grade-average';
 
   // Apply Theme to Container
   resultState.className = `status-content ${gradeClass}`;
 }
+
+// ============================================
+// PIN PANEL
+// ============================================
+
+pinBtn.addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
+  await ensureInjected(tab.id, async () => {
+    isPinned = !isPinned;
+    pinBtn.classList.toggle('active', isPinned);
+    try {
+      await chrome.tabs.sendMessage(tab.id, {
+        action: isPinned ? 'pinPanel' : 'unpinPanel'
+      });
+    } catch (e) {
+      console.log('Pin panel error:', e);
+    }
+  });
+});
+
+// ============================================
+// HELP MODAL
+// ============================================
+const helpBtn = document.getElementById('helpBtn');
+const helpModalOverlay = document.getElementById('helpModalOverlay');
+const closeHelpBtn = document.getElementById('closeHelpBtn');
+
+helpBtn.addEventListener('click', () => {
+  helpModalOverlay.classList.add('active');
+});
+
+closeHelpBtn.addEventListener('click', () => {
+  helpModalOverlay.classList.remove('active');
+});
+
+helpModalOverlay.addEventListener('click', (e) => {
+  if (e.target === helpModalOverlay) {
+    helpModalOverlay.classList.remove('active');
+  }
+});
+
+// Accordion Logic
+const accordions = document.querySelectorAll('.help-accordion-item');
+accordions.forEach((item) => {
+  const header = item.querySelector('.help-accordion-header');
+  const content = item.querySelector('.help-accordion-content');
+
+  header.addEventListener('click', () => {
+    const isActive = item.classList.contains('active');
+
+    // Close all other accordions
+    accordions.forEach(otherItem => {
+      otherItem.classList.remove('active');
+      const otherContent = otherItem.querySelector('.help-accordion-content');
+      if (otherContent) otherContent.style.maxHeight = null;
+    });
+
+    // Toggle current
+    if (!isActive) {
+      item.classList.add('active');
+      content.style.maxHeight = content.scrollHeight + 'px';
+    }
+  });
+});
 
 // Initial Call
 init();
