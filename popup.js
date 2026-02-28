@@ -83,15 +83,24 @@ function isRestrictedUrl(url) {
   return url.startsWith('chrome://') ||
     url.startsWith('edge://') ||
     url.startsWith('about:') ||
-    url.startsWith('chrome-extension://');
+    url.startsWith('chrome-extension://') ||
+    url.includes('chrome.google.com/webstore') ||
+    url.includes('chromewebstore.google.com') ||
+    url.includes('microsoftedge.microsoft.com/addons');
 }
 
 function disableUI() {
   startBtn.disabled = true;
   showBtn.disabled = true;
+  clearBtn.disabled = true;
   pinBtn.disabled = true;
+
   startBtn.style.opacity = '0.5';
   startBtn.style.cursor = 'not-allowed';
+  showBtn.style.opacity = '0.5';
+  showBtn.style.cursor = 'not-allowed';
+  clearBtn.style.opacity = '0.5';
+  clearBtn.style.cursor = 'not-allowed';
   pinBtn.style.opacity = '0.5';
   pinBtn.style.cursor = 'not-allowed';
 }
