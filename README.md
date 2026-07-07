@@ -27,12 +27,18 @@ Every metric is computed locally, in real time, with zero external requests. UX 
 *   **Visual Grade System:** Five-tier color-coded labels — Excellent (85+), Good (70+), Average (55+), Dense (40+), Fatiguing (<40) — for instant, at-a-glance design quality assessment.
 
 ## How It Works
+UX HeatGrid injects an on-demand content script into the active page, analyzes the live DOM, and renders a real-time canvas heatmap overlay directly in the browser. The pinned panel and popup communicate with the content script through Chrome extension messaging, while the scoring engine caches results and only recomputes when the DOM structure or viewport changes.
 
-### Heatmap Engine
+The extension combines attention tracking and layout analysis:
 
+*   **Attention tracking:** Element dwell scores and mouse proximity heat are merged into a grid-based heatmap.
+*   **Layout analysis:** Content density, white space, complexity, and readability are measured from the live page structure.
+*   **Theme adaptation:** Background luminance is sampled from page containers to select the most legible heatmap blend mode.
+
+## Heatmap Engine
 The heatmap updates every **500ms** using a 15×15px grid overlay. Two independent heat sources feed into the visualization:
 
-#### 1. Element Dwell Score
+### 1. Element Dwell Score
 Every visible text/interactive element accumulates a dwell score based on attention signals:
 
 | Signal | Effect |
@@ -54,13 +60,14 @@ Element priority weights:
 
 Dwell scores max out at **5.0** and do not decay — they represent cumulative attention.
 
-#### 2. Mouse Heat
+### 2. Mouse Heat
 The cursor position generates a **150px radius** heat zone:
-- Strongest at center, fades with distance (quadratic falloff)
-- Clicks add a **+2.5 instant boost**
-- Mouse heat **decays over time** (×0.96 per frame), unlike dwell scores
 
-#### Color Scale
+*   Strongest at center, fades with distance (quadratic falloff)
+*   Clicks add a **+2.5 instant boost**
+*   Mouse heat **decays over time** (×0.96 per frame), unlike dwell scores
+
+### Color Scale
 Grid cell scores are mapped to colors:
 
 | Score | Color | Meaning |
@@ -71,7 +78,6 @@ Grid cell scores are mapped to colors:
 | 1.0 | 🔴 Red | High attention / reading |
 
 ## UX Score Algorithm
-
 The UX Score is a **proprietary evaluation system** designed exclusively for UX HeatGrid. It measures **page design quality** on a 0–100 scale by analyzing the live DOM structure — not user behavior. Unlike generic auditing tools, this custom-built algorithm combines content density, spacing, complexity, and readability into a single, opinionated score built from **4 categories**, each worth **25 points**.
 
 ### Content Density (25 pts)
@@ -86,15 +92,15 @@ Measures how much of the page is covered by content. Child elements inside other
 ### White Space (25 pts)
 Measures the real pixel gaps between consecutive block elements (P, H1–H6, LI, etc.), sorted by position.
 
-- **0px** average gap → 0%
-- **48px+** average gap → 100%
-- Ideal range: 25–85%
+*   **0px** average gap → 0%
+*   **48px+** average gap → 100%
+*   Ideal range: 25–85%
 
 ### Complexity (25 pts)
 Counts the average number of tracked elements per viewport height.
 
-- `totalElements ÷ (pageHeight ÷ viewportHeight)`
-- Ideal range: 5–25 elements per screen
+*   `totalElements ÷ (pageHeight ÷ viewportHeight)`
+*   Ideal range: 5–25 elements per screen
 
 ### Readability (25 pts)
 Composite of 4 sub-scores, each measured via `getComputedStyle`:
@@ -131,9 +137,16 @@ UX HeatGrid is a strictly **local-first, zero-telemetry** application. Your data
 *   **100% Client-Side Processing:** All heatmap generation, attention tracking, DOM analysis, and UX scoring run entirely within your browser's JavaScript sandbox. There is no server component.
 *   **Zero Data Collection:** No browsing history, page content, personal identifiers, cookies, or metadata are ever captured, stored, or transmitted.
 *   **No Network Requests:** The extension makes absolutely zero outbound HTTP requests — no analytics endpoints, no CDN calls, no update pings. You can verify this in DevTools → Network.
-*   **Minimal Permissions:** Only requires `activeTab` (to inject the content script on the current page) and `scripting` (to programmatically execute the tracking engine). No background service worker, no persistent storage, no cross-origin access.
 
 See our [Privacy Policy](PRIVACY_POLICY.md) for the full policy.
+
+## Permissions
+UX HeatGrid uses minimal Chrome extension permissions:
+
+*   `activeTab` — injects the content script on the current page.
+*   `scripting` — programmatically executes the tracking engine.
+
+The extension does not use a background service worker, persistent storage, or cross-origin access.
 
 ## Tech Stack
 *   **Core:** Vanilla JavaScript (ES6+), CSS3 with Custom Properties, HTML5
