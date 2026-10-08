@@ -16,7 +16,8 @@ const buildId = `${pkg.version}+${Date.now().toString(36)}`;
 const common = {
   bundle: true,
   target: 'chrome116',
-  sourcemap: 'linked',
+  // Release builds contain only executable assets. Watch builds keep maps for local debugging.
+  sourcemap: watch ? 'linked' : false,
   minify: false,
   logLevel: 'info',
   legalComments: 'none',

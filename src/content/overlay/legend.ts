@@ -108,7 +108,7 @@ export function renderRecordedLabel(
   const choices: Array<{ id: keyof RecordedLayers; text: string; glyph: string }> = [
     { id: 'heatmap', text: 'Heatmap', glyph: 'heat' },
     { id: 'clicks', text: 'Clicks', glyph: 'click' },
-    { id: 'scroll', text: 'Scroll depth', glyph: 'scroll' },
+    { id: 'scroll', text: 'Scroll Depth', glyph: 'scroll' },
   ];
   const keys = choices.map(({ id, text, glyph }) => {
     const b = doc.createElement('button');

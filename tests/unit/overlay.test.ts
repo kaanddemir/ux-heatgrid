@@ -18,11 +18,13 @@ function rectFromAttr(this: Element): DOMRect {
   const [x = 0, y = 0, width = 0, height = 0] = (this.getAttribute('data-rect') ?? '').split(/\s+/).map(Number);
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
 }
+const originalRect = Element.prototype.getBoundingClientRect;
 beforeEach(() => {
-  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(rectFromAttr);
+  Element.prototype.getBoundingClientRect = rectFromAttr;
   Element.prototype.scrollIntoView ??= () => {};
 });
 afterEach(() => {
+  Element.prototype.getBoundingClientRect = originalRect;
   vi.restoreAllMocks();
   document.querySelectorAll(OVERLAY_TAG).forEach((n) => n.remove());
 });
@@ -69,7 +71,7 @@ describe('overlay visual rules (selectOverlayItems)', () => {
 
   it('label text never implies probability or measured data', () => {
     expect(overlayTitle(false)).toBe('Predicted');
-    expect(overlayTitle(true)).toBe('Predicted · page changed');
+    expect(overlayTitle(true)).toBe('Predicted · Page Changed');
     for (const t of [overlayTitle(false), overlayTitle(true)]) expect(t).not.toMatch(/%|probab|attention|heat|click/i);
   });
 
@@ -207,7 +209,7 @@ describe('OverlayController', () => {
     o.setVisible(true);
     o.setStale(true);
     f.run();
-    expect(o.inspect().title).toBe('Predicted · page changed');
+    expect(o.inspect().title).toBe('Predicted · Page Changed');
     expect(o.inspect().boxes.filter((b) => b.drawn)).toHaveLength(3);
     o.setPrediction(preds); // a new result is current again
     expect(o.inspect().stale).toBe(false);

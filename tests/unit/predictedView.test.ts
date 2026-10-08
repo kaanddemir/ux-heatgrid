@@ -47,11 +47,12 @@ describe('ranked list', () => {
     expect(groupByBand(s, 'medium').map((g) => g.band)).toEqual(['medium']);
   });
 
-  it('rows: clean label, type only, qualifier below high confidence, reason preview — never a score', () => {
+  it('rows: clean label, type · named area, qualifier below high confidence, reason preview — never a score', () => {
     const cta = s.elements.find((e) => e.id === el(result, 'cta').elementRef.id)!;
     const m = rowModel(s, cta);
     expect(m.label).toBe('Go');
-    expect(m.meta).toBe('Link');
+    expect(m.type).toBe('Link');
+    expect(m.meta).toBe('Link'); // type only — the page area stays in m.area for the expanded detail
     expect(m.qualifier).toBe(confidenceQualifier(cta.confidence));
     expect(m.preview).not.toBeNull();
     expect(JSON.stringify(m)).not.toMatch(/\d\.\d{2}/); // no raw numbers

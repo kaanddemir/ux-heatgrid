@@ -11,7 +11,6 @@ import type {
   RoleClass,
 } from '../../content/prediction/types';
 
-export const PREDICTED_TITLE = 'Predicted';
 export const STALE_COPY = 'Page changed';
 export const PREDICTED_EMPTY = { title: 'No prediction yet', body: 'Estimated from page structure.', action: 'Start prediction' } as const;
 

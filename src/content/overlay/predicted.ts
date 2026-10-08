@@ -51,5 +51,5 @@ export function selectOverlayItems(
 
 /** Identity word on the persistent legend. Never implies probability or measured data. */
 export function overlayTitle(stale: boolean): string {
-  return stale ? 'Predicted · page changed' : 'Predicted';
+  return stale ? 'Predicted · Page Changed' : 'Predicted';
 }

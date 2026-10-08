@@ -53,11 +53,24 @@ try {
   await sleep(400);
   const shot = async (name) => fs.writeFileSync(`${SHOTS}/p9-${name}.png`, Buffer.from((await panel.send('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
   const noHScroll = () => panel.eval('document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1');
+  /** Inspector integrity: tabs on one line, head on one line, head actions inside the panel and not overlapping. */
+  const layoutOk = () => panel.eval(`(() => {
+    const tabs = [...document.querySelectorAll('.tab')].map((t) => t.getBoundingClientRect());
+    if (tabs.some((r) => Math.abs(r.top - tabs[0].top) > 1 || r.height > 40)) return 'tabs wrap';
+    const head = document.querySelector('.ihead');
+    if (head && head.getBoundingClientRect().height > 36) return 'head wraps';
+    const acts = [...document.querySelectorAll('.ihead-actions .actions > *, .mode-head > *')].map((e) => e.getBoundingClientRect());
+    if (acts.some((r) => r.right > innerWidth + 0.5 || r.left < -0.5)) return 'action outside';
+    for (let i = 1; i < acts.length; i++) if (acts[i].top === acts[i - 1].top && acts[i].left < acts[i - 1].right - 0.5) return 'actions overlap';
+    const small = [...document.querySelectorAll('main *')].filter((e) => e.childNodes.length && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && parseFloat(getComputedStyle(e).fontSize) < 10.5);
+    if (small.length) return 'text < 10.5px: ' + small[0].className;
+    return true;
+  })()`);
   const filterFits = async () => {
     if (!(await panel.eval(`!!document.querySelector('button[data-key="filter-toggle"]')`))) return true;
     await panel.click('button[data-key="filter-toggle"]');
     await sleep(100);
-    const fit = await panel.eval(`(() => { const e = document.querySelector('.filter-popover'); if (!e) return false; const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1; })()`);
+    const fit = await panel.eval(`(() => { const e = document.querySelector('.popover'); if (!e) return false; const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1; })()`);
     await panel.click('button[data-key="filter-toggle"]');
     return fit;
   };
@@ -68,8 +81,8 @@ try {
   widths.overview = await noHScroll();
   await shot('overview');
   const navLabels = await panel.eval(`[...document.querySelectorAll('[role="tablist"][aria-label="HeatGrid sections"] [role="tab"]')].map((t) => t.textContent)`);
-  const cards = await panel.eval(`[...document.querySelectorAll('.workflow-card')].map((c) => c.getAttribute('aria-label'))`);
-  check('1/2. Overview: tabs Overview · Predict · Record; cards Page + Predict + Record; no Coach', JSON.stringify(navLabels) === '["Overview","Predict","Record"]' && JSON.stringify(cards) === '["Page","Predict","Record"]' && !/coach|finding|Developer details|Analysis JSON|Raw state|Run analyzer/i.test(ov), { navLabels, cards });
+  const cards = await panel.eval(`[...document.querySelectorAll('.mode')].map((c) => c.getAttribute('aria-label'))`);
+  check('1/2. Overview: tabs Overview · Predict · Record; page identity + Predict + Record panels; no Coach', JSON.stringify(navLabels) === '["Overview","Predict","Record"]' && JSON.stringify(cards) === '["Predict","Record"]' && (await panel.eval(`!!document.querySelector('.page-id .page-title')`)) && !/coach|finding|Developer details|Analysis JSON|Raw state|Run analyzer/i.test(ov), { navLabels, cards });
 
   // Predict → overlay shown on the page; the panel stays on Overview.
   await panel.click('button[data-key="ov-predict"]');
@@ -77,12 +90,28 @@ try {
   const predicted = await until(async () => { const s = await state(); return s?.interactionView === 'predicted' && (await panel.eval(`!!document.querySelector('#ov-predict-report')`)) && s; });
   const stayedOnOverview = (await panel.eval(`document.querySelector('[data-key="nav-overview"]').getAttribute('aria-selected')`)) === 'true';
   await panel.click('button[data-key="nav-predict"]');
-  await until(() => panel.eval(`!!document.querySelector('.screen[data-kind="predicted"] .dist')`));
+  await until(() => panel.eval(`!!document.querySelector('.screen[data-kind="predicted"] .summary')`));
   check('3a. Predict tab opens directly into results (no sub-navigation)', !(await panel.eval(`!!document.querySelector('.seg-tabs, [data-key^="itab-"]')`)));
   widths.predicted = await noHScroll();
   await shot('predicted');
   await page.screenshot({ path: `${SHOTS}/p9-page-predicted.png` });
   widths['predicted-filter-320'] = await filterFits();
+  // Visual review on a page with results: expanded row (structure · Why) and the open filter, light + dark.
+  for (const scheme of ['light', 'dark']) {
+    await panel.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+    const row = await panel.eval(`document.querySelector('.row-toggle')?.dataset.key ?? null`);
+    await panel.click(`button[data-key="${row}"]`);
+    await until(() => panel.eval(`!!document.querySelector('.detail .stat-grid')`));
+    await shot(`predicted-expanded-320-${scheme}`);
+    await panel.click(`button[data-key="${row}"]`);
+    await until(() => panel.eval(`!document.querySelector('.detail') && !document.querySelector('.row-toggle[data-selected]')`));
+    await sleep(250); // let the collapse command's re-render finish before the next pointer sequence
+    await panel.click('button[data-key="filter-toggle"]');
+    await until(() => panel.eval(`!!document.querySelector('.popover')`));
+    await shot(`predicted-filter-320-${scheme}`);
+    await panel.click('button[data-key="filter-done"]');
+  }
+  await panel.send('Emulation.setEmulatedMedia', { features: [] });
   check('3. Predict shows the overlay and keeps the panel on Overview', !!predicted && stayedOnOverview, predicted?.prediction.summary);
   const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
   await page.mouse.click(viewport.width - 225, viewport.height - 35); // High in the fixed on-page legend (All · High · Medium · Low · ×).
@@ -99,8 +128,21 @@ try {
   await panel.click('button[data-key="ov-start-record"]');
   const rec = await until(async () => { const s = await state(); return s?.session.state === 'recording' && s; });
   await sleep(1200);
-  const barText = await panel.eval(`[...document.querySelectorAll('.live-card')].map((e) => e.innerText).join(' ')`);
+  const barText = await panel.eval(`[...document.querySelectorAll('.live, .mode[data-kind="recorded"] .mode-head')].map((e) => e.innerText).join(' ')`);
   await shot('recording');
+  for (const scheme of ['light', 'dark']) {
+    await panel.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+    await panel.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 900, deviceScaleFactor: 2, mobile: false });
+    await sleep(150);
+    await shot(`recording-overview-400-${scheme}`);
+    await panel.click('button[data-key="nav-record"]');
+    await sleep(200);
+    await shot(`recording-record-400-${scheme}`);
+    await panel.click('button[data-key="nav-overview"]');
+  }
+  await panel.send('Emulation.setEmulatedMedia', { features: [] });
+  await panel.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 2, mobile: false });
+  await page.screenshot({ path: `${SHOTS}/p9-page-recording.png` });
   check('4. Record hides the Prediction visualization', rec?.interactionView === 'none' && (await diag('overlayStats')) !== undefined);
   check('5. recording state is clear (Recording · elapsed · clicks · Stop)', /Recording/.test(barText) && /\d+s/.test(barText) && /click/i.test(barText) && /Stop/.test(barText), barText);
 
@@ -134,12 +176,12 @@ try {
   await page.mouse.click(cta.cx, cta.cy);
   const faux = await rect('#faux');
   await page.mouse.click(faux.cx, faux.cy);
-  const pages2 = await panel.eval(`[...document.querySelectorAll('.live-card')].map((e) => e.innerText).join(' ')`);
+  const pages2 = await panel.eval(`[...document.querySelectorAll('.live, .mode[data-kind="recorded"] .mode-head')].map((e) => e.innerText).join(' ')`);
   const liveRecordWidths = {};
   for (const width of [320, 400, 560]) {
     await panel.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 2, mobile: false });
     await sleep(120);
-    liveRecordWidths[width] = await panel.eval(`document.querySelector('[data-key="ov-record"]')?.getAttribute('aria-expanded') === 'true' && !!document.querySelector('#ov-record-report .live-card') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`);
+    liveRecordWidths[width] = await panel.eval(`document.querySelector('[data-key="ov-record"]')?.getAttribute('aria-expanded') === 'true' && !!document.querySelector('#ov-record-report .live') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`);
   }
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 2, mobile: false });
   check('5b. Overview Record stays expanded through page interaction and navigation', Object.values(liveRecordWidths).every(Boolean), liveRecordWidths);
@@ -150,7 +192,7 @@ try {
   const done = await until(async () => { const s = await state(); return s?.session.state === 'ready' && s.interactionView === 'recorded' && s; });
   const stopStayed = (await panel.eval(`document.querySelector('[data-key="nav-overview"]').getAttribute('aria-selected')`)) === 'true';
   await panel.click('button[data-key="nav-record"]');
-  await until(() => panel.eval(`!!document.querySelector('.screen[data-kind="recorded"] .metrics')`));
+  await until(() => panel.eval(`!!document.querySelector('.screen[data-kind="recorded"] .summary')`));
   await sleep(300);
   widths.recorded = await noHScroll();
   widths['recorded-filter-320'] = await filterFits();
@@ -205,6 +247,7 @@ try {
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 900, deviceScaleFactor: 2, mobile: false });
   await sleep(400);
   // Visual review set: every main view at 400 px, light and dark.
+  const layout = {};
   const views = {
     overview: ['nav-overview'],
     predicted: ['nav-predict'],
@@ -218,8 +261,25 @@ try {
         await sleep(250);
       }
       widths[`${name}-400`] = (widths[`${name}-400`] ?? true) && (await noHScroll());
+      layout[`${name}-400-${scheme}`] = await layoutOk();
       if (name === 'predicted' || name === 'recorded') widths[`${name}-filter-400`] = (widths[`${name}-filter-400`] ?? true) && (await filterFits());
       await shot(`${name}-400-${scheme}`);
+      if ((name === 'predicted' || name === 'recorded') && (await panel.eval(`!!document.querySelector('[data-key="filter-toggle"]')`))) {
+        await panel.click('button[data-key="filter-toggle"]');
+        await sleep(150);
+        await shot(`${name}-filter-400-${scheme}`);
+        await panel.click('button[data-key="filter-done"]');
+        await sleep(100);
+        const firstRow = await panel.eval(`document.querySelector('.row-toggle')?.dataset.key ?? null`);
+        if (firstRow) {
+          await panel.click(`button[data-key="${firstRow}"]`);
+          await sleep(300);
+          layout[`${name}-expanded-400-${scheme}`] = await layoutOk();
+          await shot(`${name}-expanded-400-${scheme}`);
+          await panel.click(`button[data-key="${firstRow}"]`);
+          await sleep(200);
+        }
+      }
       if (name === 'overview') {
         const hoverShot = async (selector, state) => {
           const point = await panel.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
@@ -229,13 +289,13 @@ try {
         };
         await hoverShot('[data-key="ov-predict"]', 'card-hover');
         await hoverShot('[data-key="ov-start-predict"]', 'start-hover');
-        await hoverShot('.workflow-card[data-kind="predicted"] .workflow-chevron', 'chevron-hover');
+        await hoverShot('.mode[data-kind="predicted"] .mode-head > .chev', 'chevron-hover');
         await panel.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
       }
     }
   }
   // Intermediate narrow widths: preserve the same stacked Overview and readable expanded reports.
-  for (const width of [360, 480]) {
+  for (const width of [320, 360, 375, 480]) {
     await panel.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 2, mobile: false });
     for (const [name, keys] of Object.entries(views)) {
       for (const k of keys) {
@@ -243,6 +303,8 @@ try {
         await sleep(150);
       }
       widths[`${name}-${width}`] = await noHScroll();
+      layout[`${name}-${width}`] = await layoutOk();
+      if (width === 320 || width === 375) await shot(`${name}-${width}`);
     }
   }
   // Wider side panel.
@@ -255,10 +317,13 @@ try {
       await sleep(250);
     }
     widths[`${name}-560`] = await noHScroll();
+    layout[`${name}-560`] = await layoutOk();
     if (name === 'predicted' || name === 'recorded') widths[`${name}-filter-560`] = await filterFits();
     await shot(`${name}-560`);
   }
-  check('13b. 360 / 400 / 480 / 560 px: no horizontal scroll', Object.values(widths).every(Boolean), widths);
+  check('13b. 320 / 360 / 375 / 400 / 480 / 560 px: no horizontal scroll', Object.values(widths).every(Boolean), widths);
+  const badLayout = Object.entries(layout).filter(([, v]) => v !== true);
+  check('13c. one-line tabs and head, no clipped / overlapping actions, no tiny text (light + dark)', badLayout.length === 0, badLayout.length ? badLayout : Object.keys(layout).length);
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 400, height: 900, deviceScaleFactor: 2, mobile: false });
   await panel.click('button[data-key="nav-overview"]');
   await sleep(200);
@@ -325,7 +390,7 @@ try {
   await h.bs.send('Target.closeTarget', { targetId: panelTarget.targetId });
   await until(async () => !(await h.targets()).some((t) => t.targetId === panelTarget.targetId));
   const panel2 = await h.triggerAction(page);
-  const reopened = await until(() => panel2.eval(`!!document.querySelector('[data-key="ov-predict"]') || !!document.querySelector('.dist')`));
+  const reopened = await until(() => panel2.eval(`!!document.querySelector('[data-key="ov-predict"]') || !!document.querySelector('.summary')`));
   check('19. side panel reopen restores the prediction summary', !!reopened, reopened ? undefined : { text: (await panel2.text().catch(() => '')).slice(0, 300), state: (await state())?.prediction.state ?? null });
 
   // 20. Back / forward: no recording active → runtime ends with the document; panel stays sane.

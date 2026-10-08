@@ -5,16 +5,13 @@
 import type { RecordedLimitationCode } from '../../content/recorded/types';
 import type { RecordedListItem } from '../../content/recorded/lists';
 
-export const RECORDED_TITLE = 'Recorded';
 export const NOT_OPEN_COPY = 'Page not open · map not drawn';
 export const NOT_LIVE_COPY = 'Page reloaded since · controls can’t be outlined';
 export const LAYOUT_COPY = 'Layout may have changed since recording';
 
 export const LIST_COPY = {
-  mostInteracted: { title: 'Most interacted' },
-  clicked: { title: 'Clicked' },
-  mostHovered: { title: 'Most hovered' },
-  inViewNoInteraction: { title: 'In view, no interaction' },
+  mostInteracted: { title: 'Interacted Elements' },
+  inViewNoInteraction: { title: 'No Interaction' },
 } as const;
 
 export const RECORDED_LIMITATION_COPY: Record<RecordedLimitationCode, string> = {
@@ -56,8 +53,6 @@ export function shortMeta(i: RecordedListItem, kind: keyof typeof LIST_COPY): st
   switch (kind) {
     case 'inViewNoInteraction':
       return `${secs(i.exposureMs)} in view`;
-    case 'mostHovered':
-      return [hover, clicks ? clickText(clicks) : null].filter(Boolean).join(' · ') || plural(i.hoverEntries, 'hover');
     default:
       return [clicks ? clickText(clicks) : null, hover].filter(Boolean).join(' · ') || (i.focusEvents ? plural(i.focusEvents, 'focus', 'focuses') : plural(i.hoverEntries, 'hover'));
   }

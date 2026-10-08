@@ -224,7 +224,7 @@ describe('Recorded multi-page processing', () => {
 
 // ---------------------------------------------------------------------------
 
-const PREDICTION_INDIGO = ['#4f46e5', '#6366f1', '#818cf8', '#312e81', '#a5b4fc', '#4353d1'];
+const PREDICTION_INDIGO = ['#397bfa', '#2a6ae6', '#1f5fd6', '#6fa0ff', '#5b93ff'];
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 function hue([r, g, b]: number[]): number {
   const max = Math.max(r!, g!, b!);
@@ -245,7 +245,7 @@ describe('Recorded rendering', () => {
     expect(toggles.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
       ['Heatmap', 'true'],
       ['Clicks', 'false'],
-      ['Scroll depth', 'true'],
+      ['Scroll Depth', 'true'],
     ]);
     toggles[1]!.click();
     expect(changed).toEqual([{ heatmap: true, clicks: true, scroll: true }]);
@@ -254,7 +254,8 @@ describe('Recorded rendering', () => {
     close.click();
     expect(closed).toBe(1);
     expect(toggles.every((b) => b.classList.contains('legend-filter'))).toBe(true);
-    expect(OVERLAY_CSS).toMatch(/\.legend-filter[^}]*border-radius: 7px/);
+    expect(OVERLAY_CSS).toMatch(/\.legend-filter[^}]*border-radius: 6px/); // same radius scale as the side panel
+    expect(label.querySelector('.id .title')!.textContent).toBe('Recorded'); // identity word on the dock
   });
 
   it('warm heat ramp only (never Prediction indigo); zero is transparent, peak stays see-through', () => {
@@ -404,6 +405,7 @@ function rectFromAttr(this: Element): DOMRect {
   const [x = 0, y = 0, width = 0, height = 0] = (this.getAttribute('data-rect') ?? '').split(/\s+/).map(Number);
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
 }
+const originalRect = Element.prototype.getBoundingClientRect;
 const trusted = <E extends Event>(e: E): E => (Object.defineProperty(e, 'isTrusted', { value: true }), e);
 class NoIO {
   observe(): void {}
@@ -411,8 +413,8 @@ class NoIO {
 }
 
 describe('Recorded runtime + protocol', () => {
-  beforeEach(() => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(rectFromAttr));
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => { Element.prototype.getBoundingClientRect = rectFromAttr; });
+  afterEach(() => { Element.prototype.getBoundingClientRect = originalRect; vi.restoreAllMocks(); });
 
   const html = (name: string) => `<main data-rect="0 0 1280 2000"><h1 data-rect="20 20 400 40">${name}</h1>
     <button id="go" data-rect="100 100 200 50">Go ${name}</button><button id="other" data-rect="100 1700 200 50">Other</button></main>`;

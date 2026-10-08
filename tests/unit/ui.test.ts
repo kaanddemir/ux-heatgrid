@@ -12,7 +12,8 @@ import type { TabSnapshot } from '../../src/shared/model';
 import { makeEvent, makeRequest, type RequestEnvelope, type Response } from '../../src/shared/protocol';
 import { createPanelApp, type PanelApi } from '../../src/ui/sidepanel/app';
 import { INITIAL_NAV, SECTIONS, formatDuration, overviewModel, route } from '../../src/ui/sidepanel/model';
-import { recordedBody, recordedFilters, recordedHeadAction, recordedNotices } from '../../src/ui/sidepanel/recordedView';
+import { recordedBody, recordedFilters, recordedHeadAction, recordedWarnings } from '../../src/ui/sidepanel/recordedView';
+import { button, noticePanel } from '../../src/ui/sidepanel/ui';
 import { cleanSubject } from '../../src/ui/shared/regionLabel';
 import { fixtureReader, mount } from '../helpers/fixtureReader';
 
@@ -54,6 +55,56 @@ describe('Panel navigation model', () => {
   });
 });
 
+describe('Unified warning notice', () => {
+  it('prioritises and de-duplicates issues, keeps the primary action visible, and expands in place', () => {
+    let expanded = false;
+    let recovered = 0;
+    let toggles = 0;
+    const issues = [
+      { id: 'layout', severity: 'warning' as const, message: 'Layout changed' },
+      { id: 'failed', severity: 'critical' as const, message: 'Recording interrupted', action: button('Try again', () => recovered++, true) },
+      { id: 'layout', severity: 'info' as const, message: 'Duplicate layout copy' },
+    ];
+    const renderNotice = () => noticePanel(issues, { expanded, onExpandedChange: (open) => ((expanded = open), toggles++) })!;
+    let notice = renderNotice();
+    expect(notice.dataset.severity).toBe('critical');
+    expect(notice.querySelector('.notice-message')!.textContent).toBe('Recording interrupted');
+    expect(notice.querySelector('.notice-count')!.textContent).toBe('2 issues detected');
+    notice.querySelector<HTMLButtonElement>('.notice-action button')!.click();
+    expect([recovered, toggles]).toEqual([1, 0]);
+    notice.querySelector<HTMLButtonElement>('.notice-toggle')!.click();
+    expect([expanded, toggles]).toEqual([true, 1]);
+    notice = renderNotice();
+    expect(notice.querySelectorAll('.notice-list li')).toHaveLength(1);
+    expect(notice.textContent).not.toContain('Duplicate layout copy');
+  });
+
+  it('renders one issue without a count or disclosure control', () => {
+    const notice = noticePanel([{ id: 'stale', severity: 'action', message: 'Page changed' }])!;
+    expect(notice.querySelector('.notice-count')).toBeNull();
+    expect(notice.querySelector('.notice-toggle')).toBeNull();
+    expect(notice.getAttribute('role')).toBe('status');
+  });
+
+  it('suppresses ordinary recording states but preserves meaningful completeness warnings', () => {
+    const session: RecordedSessionView = {
+      sessionId: 's', startedAt: 0, endedAt: 1, elapsedMs: 4000, activeMs: 3000,
+      totals: { clicks: 0, activations: 0, pages: 1, controlsInteracted: 0 }, deepestScroll: 0,
+      pages: [], selectedPage: 0,
+      limitations: ['MULTI_PAGE_SESSION_COARSENED'],
+      timings: { processMs: 1, perPageMs: [] },
+    };
+    const page: RecordedPageView = {
+      position: 0, pageCount: 1, path: '/', title: 'P', pageOpen: true, elementsLive: true, layoutMayHaveChanged: false,
+      facts: { elapsedMs: 4000, activeMs: 3000, clicks: 0, activations: 0, pointerSamples: 0, controlsReached: 0, controlsInteracted: 0, maybeNotClickable: 0, deepestScroll: 0, nestedScroll: [] },
+      lists: { mostInteracted: [], clicked: [], mostHovered: [], inViewNoInteraction: [], neverReached: { count: 0, items: [] } },
+      maybeNotClickable: [], limitations: ['SHORT_SESSION', 'FEW_EVENTS', 'FRAMES_UNSUPPORTED'],
+    };
+    const warnings = recordedWarnings({ snap: snapshot({ session: { state: 'ready' } }), session, page, selected: null, note: null, busy: false });
+    expect(warnings.map((warning) => warning.id)).toEqual(['recording-limit-multi_page_session_coarsened', 'recording-limit-frames_unsupported']);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Panel app against a real runtime
 // ---------------------------------------------------------------------------
@@ -62,6 +113,7 @@ function rectFromAttr(this: Element): DOMRect {
   const [x = 0, y = 0, width = 0, height = 0] = (this.getAttribute('data-rect') ?? '').split(/\s+/).map(Number);
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
 }
+const originalRect = Element.prototype.getBoundingClientRect;
 class NoIO {
   observe(): void {}
   disconnect(): void {}
@@ -109,86 +161,102 @@ function setup() {
 }
 
 describe('Panel app', () => {
-  beforeEach(() => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(rectFromAttr));
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => { Element.prototype.getBoundingClientRect = rectFromAttr; });
+  afterEach(() => { Element.prototype.getBoundingClientRect = originalRect; vi.restoreAllMocks(); });
 
-  it('opens on Overview: page card + Predict + Record, collapsed; no Coach, no developer/debug UI', async () => {
+  const heads = (root: HTMLElement) => [...root.querySelectorAll('.screen > *')].map((n) => n.className.split(' ')[0]);
+
+  it('ignores an older refresh that resolves after a newer active-tab refresh', async () => {
+    const activeResolvers: Array<(tab: chrome.tabs.Tab) => void> = [];
+    const api: PanelApi = {
+      activeTab: () => new Promise((resolve) => activeResolvers.push(resolve)),
+      ensureRuntime: async () => ({ ok: true, data: { injected: false } }),
+      request: async () => ({ ok: true, data: snapshot() }) as never,
+    };
+    const root = document.createElement('div');
+    const app = createPanelApp(root, api);
+    const older = app.refresh();
+    const newer = app.refresh();
+    activeResolvers[1]!({ id: 2, windowId: 1, title: 'New tab', url: 'https://new.example/' } as chrome.tabs.Tab);
+    await newer;
+    activeResolvers[0]!({ id: 1, windowId: 1, title: 'Old tab', url: 'https://old.example/' } as chrome.tabs.Tab);
+    await older;
+    expect(app.inspect().tabId).toBe(2);
+    expect(root.querySelector('.page-host')!.textContent).toBe('new.example');
+  });
+
+  it('opens on Overview: page identity + Predict + Record panels, collapsed; no Coach, no developer UI', async () => {
     const { app, root, settle } = setup();
     await app.refresh();
     await settle();
     const tabs = [...root.querySelectorAll('[role="tablist"][aria-label="HeatGrid sections"] [role="tab"]')];
     expect(tabs.map((t) => [t.textContent, t.getAttribute('aria-selected')])).toEqual([['Overview', 'true'], ['Predict', 'false'], ['Record', 'false']]);
-    const actions = [...root.querySelectorAll<HTMLButtonElement>('button.workflow-toggle')];
-    expect(actions.map((a) => a.dataset.key)).toEqual(['ov-page', 'ov-predict', 'ov-record']);
-    expect(actions.map((a) => a.querySelector('.action-title')!.textContent)).toEqual(['This page', 'Predict', 'Record']);
-    expect(root.querySelectorAll('.workflow-card')).toHaveLength(3);
+    expect(root.querySelector('.page-id .page-host')!.textContent).toBe('example.test');
+    const toggles = [...root.querySelectorAll<HTMLButtonElement>('button.mode-toggle')];
+    expect(toggles.map((a) => a.dataset.key)).toEqual(['ov-predict', 'ov-record']);
+    expect(toggles.map((a) => a.getAttribute('aria-label'))).toEqual(['Predict', 'Record']);
+    expect([...root.querySelectorAll('.mode-head .mode-title')].map((e) => e.textContent)).toEqual(['Predict', 'Record']);
+    expect(root.querySelectorAll('.modes > .mode')).toHaveLength(2); // one surface, two stacked sections
+    expect(root.querySelectorAll('.mode-head button')).toHaveLength(4); // toggle + action per head; no separate chevron button
+    expect(toggles.every((a) => a.getAttribute('aria-expanded') === 'false')).toBe(true);
+    expect([...root.querySelectorAll('.mode')].map((m) => m.getAttribute('data-kind'))).toEqual(['predicted', 'recorded']);
+    expect(root.querySelector('.mode-body')).toBeNull();
     expect(root.querySelector('[data-key="ov-start-predict"]')!.textContent).toBe('Start');
     expect(root.querySelector('[data-key="ov-start-record"]')!.textContent).toBe('Start');
     expect(root.textContent).not.toMatch(/coach|finding|interaction/i);
     expect(root.querySelector('[data-kind="coach"], [data-key*="coach"], [data-key="nav-interaction"], [data-key^="itab-"]')).toBeNull();
-    expect(actions.every((a) => a.getAttribute('aria-expanded') === 'false')).toBe(true);
-    expect(root.querySelector('.workflow-report')).toBeNull();
-    expect(actions.every((a) => a.querySelector('svg[aria-hidden="true"]'))).toBe(true);
     expect(root.querySelector('details.app-dev, pre')).toBeNull();
-    expect(root.textContent).not.toMatch(/Developer details|Analysis JSON|Raw state|Run analyzer/);
-    expect(root.textContent).not.toMatch(/build|protocol|Phase \d|test/i);
+    expect(root.textContent).not.toMatch(/Developer details|Analysis JSON|Raw state|Run analyzer|build|protocol|Phase \d/i);
     expect([...root.querySelectorAll('button')].every((b) => b.type === 'button')).toBe(true);
   });
 
-  it('Predict card only expands; its Start button runs and full report opens the Predict tab', async () => {
-    const { app, root, settle, click, tab, state, sent } = setup();
+  it('Predict panel only expands; Start runs without toggling the panel; full report opens the Predict tab', async () => {
+    const { app, root, settle, click, state, sent } = setup();
     await app.refresh();
     sent.length = 0;
     await click('ov-predict');
     expect(sent).not.toContain('RUN_PREDICTION');
-    expect(root.querySelector('#ov-predict-report .overview-status')!.textContent).toBe('No prediction yet.');
+    expect(root.querySelector('#ov-predict-report > .meta')!.textContent).toBe('No prediction yet.');
+    await click('ov-predict'); // collapse, then Start from the closed head
     await click('ov-start-predict');
     expect(app.inspect().nav).toEqual({ section: 'overview' });
     expect(state().interactionView).toBe('predicted');
-    expect(root.querySelector('[data-key="ov-predict"]')!.getAttribute('aria-expanded')).toBe('true');
-    expect(root.querySelector('#ov-predict-report .dist')).not.toBeNull();
-    expect(root.querySelectorAll('#ov-predict-report .workflow-preview li').length).toBeGreaterThan(0);
-    expect(root.querySelector('[data-key="ov-open-predict"]')).not.toBeNull();
-    // Overview disclosures are independent: opening and closing Record does not disturb Predict.
+    expect(root.querySelector('[data-key="ov-predict"]')!.getAttribute('aria-expanded')).toBe('true'); // Start opens; the click never bubbled into a toggle
+    // Overview uses the same summary component as the Predict screen.
+    expect(root.querySelector('#ov-predict-report .summary [data-band="high"]')).not.toBeNull();
+    expect(root.querySelectorAll('#ov-predict-report .preview li').length).toBeGreaterThan(0);
+    // Panels are independent.
     await click('ov-record');
     expect(root.querySelector('#ov-predict-report')).not.toBeNull();
     expect(root.querySelector('#ov-record-report')).not.toBeNull();
     await click('ov-record');
     expect(root.querySelector('#ov-predict-report')).not.toBeNull();
-    await click('ov-predict');
-    expect(root.querySelector('#ov-predict-report')).toBeNull();
-    await click('ov-predict');
     await click('ov-open-predict');
     expect(app.inspect().nav).toEqual({ section: 'predict' });
     expect(root.querySelector('[data-key="nav-predict"]')!.getAttribute('aria-selected')).toBe('true');
-    expect(root.querySelector('.seg-tabs, [data-key^="itab-"]')).toBeNull(); // no Predicted | Recorded sub-navigation
-    const t = root.textContent!;
-    expect(root.querySelector('.screen-head .title')!.textContent).toBe('Predicted');
-    expect(root.querySelector('.screen-head p')).toBeNull(); // no subtitle
-    expect(t).not.toContain('Estimated from page structure');
-    // Header: Re-run · Show on page. Footer: Reset only (no coverage line, no Include Low).
-    expect([...root.querySelectorAll('.screen-head .head-actions [data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['predict-rerun', 'overlay', 'filter-toggle']);
-    expect(root.querySelector('[data-key="low"]')).toBeNull();
-    expect(root.querySelector('.screen-foot')!.textContent!.trim()).toBe('Reset prediction');
-    expect(t).not.toMatch(/assessed/);
-    expect(t).not.toMatch(/score|probability/i);
+    expect(root.querySelector('[data-key^="itab-"]')).toBeNull(); // no sub-navigation
+    // Shared inspector frame: head · summary · groups · footer.
+    expect(heads(root)).toEqual(['ihead', 'summary', 'groups', 'foot']);
+    expect(root.querySelector('.ihead-title')!.textContent).toBe('Predict');
+    expect([...root.querySelectorAll('.ihead-actions [data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['overlay', 'filter-toggle']);
+    expect(root.querySelector('.summary .caption')).toBeNull(); // no caption under the band counts
+    expect([...root.querySelectorAll('.foot .btn')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['clear', 'predict-rerun']); // re-run right of reset
+    expect(root.textContent).not.toMatch(/score|probability|attention|engagement|likely to click/i);
     await settle();
   });
 
-  it('switching views never runs an engine and keeps the type filter state', async () => {
+  it('switching views never runs an engine and keeps filters and the overlay choice', async () => {
     const { app, root, sent, settle, click, tab, state } = setup();
     await app.refresh();
     await click('ov-start-predict');
     tab('nav-predict').click();
     await settle();
     await click('filter-toggle');
-    expect(root.querySelector('.filter-popover [aria-label="Band"]')).toBeNull();
-    const choices = [...root.querySelectorAll<HTMLElement>('[data-key^="kind-"]:not([data-key="kind-all"])')];
-    const chosen = choices[0]!;
+    const chosen = root.querySelector<HTMLElement>('[data-key^="kind-"]:not([data-key="kind-all"])')!;
     const chosenKey = chosen.dataset.key!;
     chosen.click();
     await settle();
-    expect(root.querySelectorAll('.item-row').length).toBeGreaterThan(0);
+    expect(root.querySelectorAll('.row').length).toBeGreaterThan(0);
     const overlay = root.querySelector('[data-key="overlay"]') as HTMLInputElement;
     expect(overlay.checked).toBe(true);
     overlay.checked = false;
@@ -202,63 +270,60 @@ describe('Panel app', () => {
     expect(sent.filter((t) => /^(RUN_|START_|STOP_|CLEAR_)/.test(t))).toEqual([]);
     if (!root.querySelector(`[data-key="${chosenKey}"]`)) await click('filter-toggle');
     expect(root.querySelector(`[data-key="${chosenKey}"]`)!.getAttribute('aria-pressed')).toBe('true');
+    expect(root.querySelector('.filter-count')!.textContent).toBe('1');
     expect(state().interactionView).toBe('none'); // overlay switched off stays off
   });
 
-  it('Record turns the Record tile into Stop with live stats; Stop stays on Overview; Recorded hides empty lists', async () => {
+  it('recording: Start → live block (same summary) with Stop in the head slot; survives tabs; Stop finishes in place', async () => {
     const { app, root, settle, click, tab, state } = setup();
     await app.refresh();
     await click('ov-start-predict');
-    await click('ov-record');
-    expect(state().session.state).toBe('idle');
     await click('ov-start-record');
     expect(state().interactionView).toBe('none'); // Prediction visualization hidden while recording
-    expect(root.querySelector('.rec-bar, .live-pill')).toBeNull(); // Overview: the Record tile becomes the live state, no banner
     expect(root.querySelector('[data-key="ov-start-record"]')).toBeNull();
-    expect(root.querySelector('[data-key="stop"]')!.textContent).toBe('Stop');
-    expect(root.querySelector('.ov-workflows .live-card')!.textContent).toMatch(/Recording.*\d+s.*clicks?.*scroll.*Stop/);
-    expect(root.querySelector('[data-key^="ov-go-recorded"], [data-key="ov-view-recorded"]')).toBeNull(); // one place only
-    // Recorder activity and a same-tab load refresh update the live body without resetting the
-    // independently-owned Overview disclosure state.
+    const stop = root.querySelector<HTMLButtonElement>('.mode[data-kind="recorded"] .mode-head [data-key="stop"]')!;
+    expect(stop.textContent).toBe('Stop');
+    expect(stop.classList.contains('is-stop')).toBe(true);
+    const live = root.querySelector('#ov-record-report .live')!;
+    expect(live.querySelector('.live-status')!.textContent).toMatch(/Recording/);
+    expect([...live.querySelectorAll('.cell-label')].map((e) => e.textContent)).toEqual(['Duration', 'Clicks', 'Scroll']);
+    expect(live.querySelector('.cell-value')!.textContent).toMatch(/^\d+s$/); // filled immediately, not blank
+    expect(root.querySelector('[data-key="live-pill"]')).toBeNull(); // the live block is visible already
+    // Ticks update values in place without re-rendering (the panel stays open).
+    const before = live.querySelector('.cell-value');
+    app.onEvent(makeEvent('SESSION_TICK', { sessionId: state().session.sessionId!, summary: { ...state().session.summary!, elapsedMs: 61_000, clicks: 3 } }), 1);
+    expect(before!.textContent).toBe('1m 01s');
+    expect(root.querySelector('#ov-record-report .live')).toBe(live);
+    // Page activity + same-tab refresh keep the disclosure.
     document.getElementById('b1')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    document.getElementById('b2')!.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 24, clientY: 105 }));
     window.dispatchEvent(new Event('scroll'));
     await settle();
-    await app.refresh(); // mirrors chrome.tabs.onUpdated(status=complete) for the same tab
+    await app.refresh();
     await settle();
     expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
-    expect(root.querySelector('#ov-record-report .live-card')).not.toBeNull();
-    expect(root.querySelector('[data-key="stop"]')).not.toBeNull();
-    // Switching tabs never stops, restarts or resets the session.
     const sid = state().session.sessionId;
     tab('nav-predict').click();
     await settle();
     expect(root.querySelector('[data-key="live-pill"]')!.textContent).toMatch(/\d+s/); // compact status elsewhere
     tab('nav-record').click();
     await settle();
-    expect(root.querySelector('[data-key="live-pill"]')).toBeNull(); // Record shows the live tile itself
-    expect(root.querySelector('.screen .live-card [data-key="stop"]')).not.toBeNull();
+    expect(heads(root)).toEqual(['ihead', 'live']); // same frame: head (Stop) · live block
+    expect(root.querySelector('.ihead-actions [data-key="stop"]')).not.toBeNull();
     tab('nav-overview').click();
     await settle();
-    expect(app.inspect().nav.section).toBe('overview');
     expect(state().session).toMatchObject({ state: 'recording', sessionId: sid });
-    expect(state().session.summary).not.toBeNull(); // the live session keeps its data across tab switches
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
-    await click('Stop');
+    await click('stop');
     expect(app.inspect().nav.section).toBe('overview'); // Stop finishes in place
     expect(state().interactionView).toBe('recorded');
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
-    expect(root.querySelector('#ov-record-report .metrics')).not.toBeNull();
-    expect(root.querySelector('[data-key="ov-open-record"]')).not.toBeNull();
+    expect([...root.querySelectorAll('#ov-record-report .summary .cell-label')].map((e) => e.textContent)).toEqual(['Duration', 'Clicks', 'Scroll', 'Interacted']);
     await click('ov-open-record');
     expect(app.inspect().nav).toEqual({ section: 'record' });
-    const t = root.textContent!;
-    expect(root.querySelector('.screen-head .title')!.textContent).toBe('Recorded');
-    expect(t).not.toMatch(/Recorded Interaction|This session/);
-    expect(t).toMatch(/Duration.*Clicks.*Scroll.*Interacted/);
-    expect(root.querySelector('.screen-foot [data-key="rec-clear"]')).not.toBeNull(); // Clear at the bottom
-    expect(t).not.toMatch(/Most hovered|In view, no interaction/); // nothing to list → hidden
-    expect(root.querySelector('.rec-bar')).toBeNull();
+    // Notices (here: the fixture's geometry reads as a layout change) always come first, before the head.
+    expect(heads(root).filter((h) => h !== 'notice')).toEqual(['ihead', 'summary', 'groups', 'foot']); // identical frame to Predict
+    expect(root.querySelector('.ihead-title')!.textContent).toBe('Record');
+    expect([...root.querySelectorAll('.ihead-actions [data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['rec-show', 'filter-toggle']);
+    expect([...root.querySelectorAll('.foot .btn')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-clear', 'rec-rerun']); // same footer as Predict
+    expect(root.textContent).not.toMatch(/Most hovered|In view, no interaction/); // nothing to list → hidden
     expect(root.querySelector('select')).toBeNull(); // single page: no page chrome
   });
 
@@ -268,23 +333,20 @@ describe('Panel app', () => {
     sent.length = 0;
     tab('nav-predict').click();
     await settle();
-    expect(root.querySelector('.screen-head .title')!.textContent).toBe('Predicted');
-    expect(root.textContent).toContain('No prediction yet');
+    expect(heads(root)).toEqual(['ihead', 'empty']);
+    expect(root.querySelector('.empty-title')!.textContent).toBe('No prediction yet');
     expect(root.querySelector('[data-key="predict-empty"]')!.textContent).toBe('Start prediction');
+    expect(root.querySelector('[data-key="predict-empty"]')!.classList.contains('is-primary')).toBe(true);
     tab('nav-record').click();
     await settle();
-    expect(root.querySelector('.screen-head .title')!.textContent).toBe('Recorded');
-    expect(root.textContent).toContain('No recording yet');
-    expect(root.textContent).toContain('Capture a live session.');
+    expect(heads(root)).toEqual(['ihead', 'empty']);
+    expect(root.querySelector('.empty-title')!.textContent).toBe('No recording yet');
+    expect(root.querySelector('.empty-body')!.textContent).toBe('Capture a live session.');
     expect(root.querySelector('[data-key="rec-start"]')!.textContent).toBe('Start recording');
     expect(sent.filter((t) => /^(RUN_|START_|STOP_|CLEAR_)/.test(t))).toEqual([]); // opening a tab never runs anything
-    expect(root.textContent).not.toMatch(/coach|finding/i);
-    tab('nav-overview').click();
-    await settle();
-    expect(app.inspect().nav).toEqual({ section: 'overview' });
   });
 
-  it('a recording started on the Record tab opens the Overview Record card; a user collapse sticks through ticks and reloads', async () => {
+  it('a recording started on the Record tab opens the Overview Record panel; a user collapse sticks', async () => {
     const { app, root, settle, click, tab, state } = setup();
     await app.refresh();
     tab('nav-record').click();
@@ -294,10 +356,10 @@ describe('Panel app', () => {
     tab('nav-overview').click();
     await settle();
     expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
-    await click('ov-record'); // user collapses
+    await click('ov-record');
     expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-key="live-pill"]')).not.toBeNull(); // collapsed → status moves to the app bar
     document.getElementById('b1')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    window.dispatchEvent(new Event('scroll'));
     await settle();
     await app.refresh();
     await settle();
@@ -305,15 +367,16 @@ describe('Panel app', () => {
     expect(state().session.state).toBe('recording');
   });
 
-  it('band sections collapse and expand from their heading; the choice survives navigation', async () => {
+  it('band groups collapse from their heading; the choice survives navigation', async () => {
     const { app, root, sent, settle, click, tab } = setup();
     await app.refresh();
     await click('ov-start-predict');
     tab('nav-predict').click();
     await settle();
     const head = () => root.querySelector<HTMLButtonElement>('[data-key="sec-pred-medium"]')!;
-    const rows = () => root.querySelectorAll('section[aria-label^="Medium"] button.item').length;
+    const rows = () => root.querySelectorAll('section[aria-label^="Medium"] .row').length;
     expect(head().getAttribute('aria-expanded')).toBe('true');
+    expect(head().querySelector('.band-key[data-band="medium"]')).not.toBeNull(); // same mark as the on-page outline
     expect(rows()).toBeGreaterThan(0);
     sent.length = 0;
     await click('sec-pred-medium');
@@ -325,11 +388,9 @@ describe('Panel app', () => {
     tab('nav-predict').click();
     await settle();
     expect(head().getAttribute('aria-expanded')).toBe('false');
-    await click('sec-pred-medium');
-    expect(rows()).toBeGreaterThan(0);
   });
 
-  it('stale prediction: compact notice with Run again (no automatic rerun)', async () => {
+  it('stale prediction: one notice before the head, Run again, no duplicate Re-run, no automatic rerun', async () => {
     const { app, root, sent, settle, click, tab, state } = setup();
     await app.refresh();
     await click('ov-start-predict');
@@ -339,65 +400,82 @@ describe('Panel app', () => {
     sent.length = 0;
     app.onEvent(makeEvent('STATE_CHANGED', { snapshot: { ...s, prediction: { ...s.prediction, state: 'stale', staleReason: 'dom-change' } } }), 1);
     await settle();
-    const notice = root.querySelector('.notice[role="status"]')!;
-    expect(notice.textContent).toContain('Page changed');
-    expect(notice.querySelector('button')!.textContent).toBe('Run again');
-    const zone = root.querySelector('.screen[data-kind="predicted"] > .notice-zone')!;
-    const head = root.querySelector('.screen[data-kind="predicted"] > .screen-head')!;
-    expect(zone.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(root.querySelectorAll('.screen[data-kind="predicted"] .notice')).toHaveLength(1);
+    expect(heads(root)[0]).toBe('notice');
+    const n = root.querySelector('.screen .notice[role="status"]')!;
+    expect(n.textContent).toContain('Page changed');
+    expect(n.querySelector('button')!.textContent).toBe('Run again');
+    expect(root.querySelectorAll('.screen .notice')).toHaveLength(1);
+    expect(root.querySelector('[data-key="predict-rerun"]')).toBeNull();
     expect(sent).not.toContain('RUN_PREDICTION');
   });
 
-  it('Predict filters narrow, never run', async () => {
+  it('Predict filters: Band and Type narrow the list, count active, Reset clears; never run', async () => {
     const { app, root, settle, click, sent } = setup();
     await app.refresh();
     await click('ov-start-predict');
     await click('nav-predict');
     await click('filter-toggle');
-    const bar = () => root.querySelector('.filter-popover')!;
-    expect(bar().querySelector('[aria-label="Band"]')).toBeNull();
-    expect(bar().querySelector('[aria-label="Type"]')).not.toBeNull();
-    expect(bar().querySelector('[data-key="kind-all"]')!.getAttribute('aria-pressed')).toBe('true');
-    // Type filter: pick the first type chip; every listed row must then be of that type.
-    const typeChip = bar().querySelector<HTMLButtonElement>('[data-key^="kind-"]:not([data-key="kind-all"])');
+    const pop = () => root.querySelector('.popover')!;
+    expect(pop().classList.contains('is-entering')).toBe(true);
+    expect([...pop().querySelectorAll('.pop-label')].map((e) => e.textContent)).toEqual(['Band', 'Type']);
     sent.length = 0;
-    if (typeChip) {
-      const n = Number(typeChip.querySelector('.seg-n')!.textContent);
-      typeChip.click();
-      await settle();
-      expect(root.querySelectorAll('.item-row').length).toBe(n);
-    }
-    expect(sent.filter((t) => /^(RUN_|START_|STOP_|CLEAR_)/.test(t))).toEqual([]); // filtering is presentation only
-    expect([...root.querySelectorAll('.filter-popover .seg-n')].every((e) => Number(e.textContent) > 0)).toBe(true); // no empty chips
+    const band = pop().querySelector<HTMLButtonElement>('[data-key^="band-"]:not([data-key="band-all"])')!;
+    const n = Number(band.querySelector('.choice-n')!.textContent);
+    band.click();
+    await settle();
+    expect(pop().classList.contains('is-entering')).toBe(false); // selection updates do not restart entrance motion
+    expect(root.querySelectorAll('.groups .row').length).toBe(Math.min(n, 5));
+    expect(root.querySelectorAll('.groups .group')).toHaveLength(1);
+    expect(root.querySelector('.filter-count')!.textContent).toBe('1');
+    expect(root.querySelector('.summary [data-band="high"]')).not.toBeNull(); // summary always shows the whole page
+    await click('filter-reset');
+    expect(root.querySelector('.filter-count')).toBeNull();
+    expect(sent.filter((t) => /^(RUN_|START_|STOP_|CLEAR_)/.test(t))).toEqual([]);
+    expect([...root.querySelectorAll('.popover .choice-n')].every((e) => Number(e.textContent) > 0)).toBe(true); // no empty choices
+    // Escape dismisses.
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await settle();
+    expect(root.querySelector('.popover')).toBeNull();
+    await click('filter-toggle');
+    await click('nav-overview');
+    await click('nav-predict');
+    expect(root.querySelector('.popover')).toBeNull(); // navigation closes state and removes document listeners
   });
 
-  it('keyboard: tablists support arrow keys; rows expose aria-expanded', async () => {
+  it('rows: the eye never toggles the row; keyboard tabs wrap; detail = structure grid · Why · caveats', async () => {
     const { app, root, settle, click, tab } = setup();
     await app.refresh();
     tab('nav-overview').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     await settle();
     expect(app.inspect().nav.section).toBe('predict');
-    expect(tab('nav-predict').getAttribute('aria-selected')).toBe('true');
-    expect(tab('nav-overview').getAttribute('tabindex')).toBe('-1');
     tab('nav-predict').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     await settle();
-    expect(app.inspect().nav.section).toBe('record');
     tab('nav-record').dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     await settle();
     expect(app.inspect().nav.section).toBe('overview'); // wraps: three destinations only
     tab('nav-predict').click();
     await settle();
     await click('Start prediction');
-    const row = root.querySelector<HTMLButtonElement>('button.item')!;
-    expect(row.getAttribute('aria-expanded')).toBe('false');
-    row.click();
+    const toggle = root.querySelector<HTMLButtonElement>('.row-toggle')!;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    toggle.click();
     await settle();
-    expect(root.querySelector<HTMLButtonElement>('button.item[data-selected]')!.getAttribute('aria-expanded')).toBe('true');
-    // Expanded detail: Why (+ Caveats) only — the component factors are never rendered.
-    const detail = root.querySelector('.detail')!;
-    expect([...detail.querySelectorAll('.detail-label')].map((e) => e.textContent).filter((t) => t !== 'Caveats')).toEqual(['Why']);
-    expect(detail.textContent).not.toMatch(/Factors|Prominence|Competition|Availability|Context/);
+    const open = root.querySelector<HTMLButtonElement>('.row-toggle[data-selected]')!;
+    expect(open.getAttribute('aria-expanded')).toBe('true');
+    // Opening a row outlines it on the page; the eye then clears / restores that outline only.
+    expect(root.querySelector('.row.is-open .icon-btn')!.getAttribute('aria-pressed')).toBe('true');
+    root.querySelector<HTMLButtonElement>('.row.is-open .icon-btn')!.click();
+    await settle();
+    expect(root.querySelector('.row-toggle[data-selected]')).not.toBeNull(); // the row did not collapse
+    expect(root.querySelector('.row.is-open .icon-btn')!.getAttribute('aria-pressed')).toBe('false');
+    root.querySelector<HTMLButtonElement>('.row.is-open .icon-btn')!.click();
+    await settle();
+    expect(root.querySelector('.row.is-open .icon-btn')!.getAttribute('aria-pressed')).toBe('true');
+    const d = root.querySelector('.detail')!;
+    expect(d.querySelector('.stat-grid')!.classList.contains('structure-grid')).toBe(true);
+    expect([...d.querySelectorAll('.stat dt')].map((e) => e.textContent).slice(0, 2)).toEqual(['Band', 'Type']);
+    expect([...d.querySelectorAll('.detail-label')].map((e) => e.textContent).filter((t) => t !== 'Caveats')).toEqual(['Why']);
+    expect(d.textContent).not.toMatch(/Factors|Prominence|Competition|Availability|Context|\d\.\d{2}/);
   });
 });
 
@@ -416,8 +494,10 @@ describe('Recorded multi-page view', () => {
     const noop = { onRecord() {}, onStop() {}, onClear() {}, onShowOnPage() {}, onLayers() {}, onPage() {}, onSelect() {}, onFocus() {} };
     const a = recordedBody({ snap, session, page: page({}), selected: null, note: null, busy: false }, noop);
     expect([...a.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Page 1 of 2 · /pricing', 'Page 2 of 2 · /checkout']);
-    expect(recordedNotices({ snap, session, page: page({}), selected: null, note: null, busy: false }).map((n) => n.textContent).join(' ')).toContain('Page not open · map not drawn');
+    expect(recordedWarnings({ snap, session, page: page({}), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Page not open · map not drawn');
     expect(a.textContent).toMatch(/Pages\s*2/);
+    expect(a.querySelector('.page-context .caption')!.textContent).toBe('0s · 4 clicks · 50% scroll · 1 interacted'); // one line, not a second strip
+    expect(a.querySelectorAll('.summary')).toHaveLength(1);
     const closedPage = page({});
     const closedFilter = recordedFilters(
       { snap: snapshot({ session: { state: 'ready' }, recorded: { page: 0, pageCount: 2, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: false } }), session, page: closedPage, selected: null, note: null, busy: false, filterOpen: true },
@@ -426,7 +506,7 @@ describe('Recorded multi-page view', () => {
     )!;
     expect((closedFilter.querySelector('[data-key="rec-heat"]') as HTMLInputElement).disabled).toBe(true); // cannot draw over another page
     const b = recordedBody({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }, noop);
-    expect(recordedNotices({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }).map((n) => n.textContent).join(' ')).toContain('Layout may have changed since recording');
+    expect(recordedWarnings({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Layout may have changed since recording');
     expect(b.textContent).not.toMatch(/outdated|stale/i); // historical, not Prediction-stale
     expect(b.textContent).not.toMatch(/[?#]/);
     // Phase 9: a processing failure is explained, not shown as "No recording yet".
@@ -436,10 +516,11 @@ describe('Recorded multi-page view', () => {
   });
 });
 
-describe('Recorded rows (Predicted-style inspector)', () => {
-  it('short meta, one open row per list, eye on the open row; Never reached / May not be clickable not listed', () => {
+describe('Record rows (shared inspector row)', () => {
+  it('shows each stable element once in two meaningful groups, with details, layers and progressive disclosure', () => {
     const item = { elementRef: 7, tagName: 'a', label: 'Work', region: 'Section 2', clicks: 1, activations: 0, hoverEntries: 1, hoverDwellMs: 1300, focusEvents: 1, exposureMs: 9000, reached: true };
-    const lists = { mostInteracted: [item], clicked: [item], mostHovered: [], inViewNoInteraction: [], neverReached: { count: 1, items: [{ ...item, elementRef: 9, label: 'Skip to content', reached: false }] } };
+    const exposed = { ...item, elementRef: 8, label: 'Browse', clicks: 0, hoverEntries: 0, hoverDwellMs: 0, focusEvents: 0, exposureMs: 5000 };
+    const lists = { mostInteracted: [item], clicked: [item], mostHovered: [item], inViewNoInteraction: [exposed], neverReached: { count: 1, items: [{ ...item, elementRef: 9, label: 'Skip to content', reached: false }] } };
     const session: RecordedSessionView = {
       sessionId: 's', startedAt: 0, endedAt: 1, elapsedMs: 7000, activeMs: 7000, totals: { clicks: 1, activations: 0, pages: 1, controlsInteracted: 1 }, deepestScroll: 1,
       pages: [{ position: 0, path: '/', title: 'P', clicks: 1, activeMs: 1 }], selectedPage: 0, limitations: [], timings: { processMs: 1, perPageMs: [1] },
@@ -452,48 +533,50 @@ describe('Recorded rows (Predicted-style inspector)', () => {
     const snap = snapshot({ session: { state: 'ready' } });
     const noop = { onRecord() {}, onStop() {}, onClear() {}, onShowOnPage() {}, onLayers() {}, onPage() {}, onSelect() {}, onFocus() {} };
     const holder = document.createElement('div');
-    holder.append(recordedBody({ snap, session, page, selected: 7, selectedList: 'clicked', note: null, busy: false }, noop));
-    expect(holder.querySelector('.metric-bar')).toBeNull();
-    expect(holder.querySelector('.item-row .item-meta')).toBeNull(); // metrics live only in the expanded inspector
-    expect([...holder.querySelectorAll('[aria-expanded="true"]')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-clicked-7']); // opens in one list only
+    holder.append(recordedBody({ snap, session, page, selected: 7, note: null, busy: false }, noop));
+    // Same row component as Predict: label · short meta · chevron; eye only on the open row.
+    expect([...holder.querySelectorAll('.row-line')].map((r) => [r.querySelector('.row-label')!.textContent, r.querySelector('.row-meta')!.textContent])).toEqual([['Work', '1 click · 1.3s hover'], ['Browse', '5.0s in view']]);
+    expect([...holder.querySelectorAll('[aria-expanded="true"]')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-mostInteracted-7']);
     expect(holder.querySelectorAll('.detail')).toHaveLength(1);
     expect(holder.querySelector('[data-key="rec-show-7"]')!.getAttribute('title')).toBe('Show on page');
-    // Activity: one compact 2x2 grid; no redundant heading, Type or Region.
-    const stats = holder.querySelector('.detail .recorded-stat-grid')!;
+    // Activity: the shared stat grid, measured facts only.
+    const stats = holder.querySelector('.detail .stat-grid')!;
     expect(stats.getAttribute('aria-label')).toBe('Activity');
-    expect([...stats.querySelectorAll('.recorded-stat')].map((e) => e.textContent)).toEqual(['Clicks1', 'Hover1.3s', 'Focus1', 'In view9.0s']);
+    expect([...stats.querySelectorAll('.stat')].map((e) => e.textContent)).toEqual(['Clicks1', 'Hover1.3s', 'Focus1', 'In view9.0s']);
     expect(holder.querySelector('.detail-label')).toBeNull();
-    // Never reached / May not be clickable are not listed: no section, no coordinates.
+    // Never reached / May not be clickable are not listed: no group, no coordinates.
     expect(holder.textContent).not.toMatch(/Never reached|Not reached|May not be clickable|Unlabelled element|542|305|\bpx\b/);
-    // Recorded filtering controls only the on-page visualization; activity sections stay visible.
-    const withFilter = (recorded = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: true }) => {
-      const d = document.createElement('div');
-      const model = { snap: snapshot({ session: { state: 'ready' }, recorded }), session, page, selected: null, note: null, busy: false, list: 'clicked' as const, filterOpen: true };
-      const handlers = { ...noop, onList() {} };
-      d.append(recordedBody(model, handlers));
-      const filter = recordedFilters(model, page, handlers);
-      if (filter) d.append(filter);
-      return d;
-    };
-    const filtered = withFilter();
-    expect(filtered.querySelector('.filter-view')!.getAttribute('aria-label')).toBe('View');
-    expect([...filtered.querySelectorAll('.filter-view [data-key]')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-heat', 'rec-clicks', 'rec-scroll']);
-    expect(filtered.querySelector('.filter-view .icon')).toBeNull(); // same selector + label rhythm as the other filter groups
-    expect(filtered.querySelector('[data-key^="rec-list-"]')).toBeNull();
-    expect([...filtered.querySelectorAll('section .section-title')].map((e) => e.textContent)).toEqual(['Most interacted', 'Clicked']);
-    expect(filtered.querySelector('.layers')).toBeNull();
-    const longItems = Array.from({ length: 7 }, (_, n) => ({ ...item, elementRef: 20 + n, label: `Item ${n + 1}` }));
+    // Filter = visualization settings only: three independent switches; activity groups stay visible.
+    const recorded = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: false, scroll: true }, focusedElementId: null, pageOpen: true };
+    const model = { snap: snapshot({ session: { state: 'ready' }, recorded }), session, page, selected: null, note: null, busy: false, filterOpen: true };
+    const changed: unknown[] = [];
+    const filter = recordedFilters(model, page, { ...noop, onLayers: (l) => void changed.push(l) })!;
+    expect([...filter.querySelectorAll('.pop-label')].map((e) => e.textContent)).toEqual(['Layers']);
+    const inputs = [...filter.querySelectorAll<HTMLInputElement>('.switch-row input')];
+    expect(inputs.map((i) => [i.dataset.key, i.checked])).toEqual([['rec-heat', true], ['rec-clicks', false], ['rec-scroll', true]]);
+    expect(filter.querySelector('.filter-count')!.textContent).toBe('1'); // one layer hidden
+    inputs[1]!.checked = true;
+    inputs[1]!.dispatchEvent(new Event('change'));
+    expect(changed).toEqual([{ heatmap: true, clicks: true, scroll: true }]); // independent, not exclusive
+    expect(filter.querySelector('[data-key^="rec-list-"], .choices')).toBeNull(); // no activity-category filters
+    const body = document.createElement('div');
+    body.append(recordedBody(model, noop));
+    expect([...body.querySelectorAll('.group-title')].map((e) => e.textContent)).toEqual(['Interacted Elements', 'No Interaction']);
+    expect(body.textContent).not.toMatch(/Most interacted|Clicked|Most hovered/);
+    const longItems = Array.from({ length: 7 }, (_, n) => ({ ...item, elementRef: 20 + n, label: n < 2 ? 'Same label' : `Item ${n + 1}` }));
     const longPage = { ...page, lists: { ...lists, mostInteracted: longItems } };
     const firstFive = document.createElement('div');
-    firstFive.append(recordedBody({ snap, session, page: longPage, selected: null, note: null, busy: false, list: 'mostInteracted', listLimits: new Map() }, { ...noop, onList() {}, onMore() {} }));
-    expect(firstFive.querySelectorAll('section[aria-label^="Most interacted"] .item-row')).toHaveLength(5);
+    firstFive.append(recordedBody({ snap, session, page: longPage, selected: null, note: null, busy: false, listLimits: new Map() }, { ...noop, onMore() {} }));
+    expect(firstFive.querySelectorAll('section[aria-label^="Interacted Elements"] .row')).toHaveLength(5);
     expect(firstFive.querySelector('[data-key="rec-more-mostInteracted"]')!.textContent).toBe('Show 5 more');
     const allSeven = document.createElement('div');
-    allSeven.append(recordedBody({ snap, session, page: longPage, selected: null, note: null, busy: false, list: 'mostInteracted', listLimits: new Map([['mostInteracted', 10]]) }, { ...noop, onList() {}, onMore() {} }));
-    expect(allSeven.querySelectorAll('section[aria-label^="Most interacted"] .item-row')).toHaveLength(7);
+    allSeven.append(recordedBody({ snap, session, page: longPage, selected: null, note: null, busy: false, listLimits: new Map([['mostInteracted', 10]]) }, { ...noop, onMore() {} }));
+    expect(allSeven.querySelectorAll('section[aria-label^="Interacted Elements"] .row')).toHaveLength(7);
+    expect([...allSeven.querySelectorAll('.row-label')].filter((e) => e.textContent === 'Same label')).toHaveLength(2); // identity is elementRef, not visible copy
+    expect([...allSeven.querySelectorAll<HTMLElement>('[data-key^="rec-mostInteracted-"]')].slice(0, 2).map((e) => e.dataset.key)).toEqual(['rec-mostInteracted-20', 'rec-mostInteracted-21']);
     expect(allSeven.querySelector('[data-key="rec-more-mostInteracted"]')).toBeNull();
     const head = recordedHeadAction({ snap, session, page, selected: null, note: null, busy: false }, noop)!;
-    expect([...head.querySelectorAll('[data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['rec-rerun', 'rec-show']); // same place as Predicted
+    expect([...head.querySelectorAll('[data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['rec-show', 'filter-toggle']); // same slots as Predict
   });
 });
 

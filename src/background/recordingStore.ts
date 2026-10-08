@@ -40,7 +40,11 @@ export function createRecordingStore(storage: StorageLike, budget = SESSION_BUDG
   const locks = new Map<number, Promise<unknown>>();
   const serial = <T>(tabId: number, fn: () => Promise<T>): Promise<T> => {
     const run = (locks.get(tabId) ?? Promise.resolve()).then(fn, fn);
-    locks.set(tabId, run.catch(() => {}));
+    const settled = run.catch(() => {});
+    locks.set(tabId, settled);
+    void settled.finally(() => {
+      if (locks.get(tabId) === settled) locks.delete(tabId);
+    });
     return run;
   };
 

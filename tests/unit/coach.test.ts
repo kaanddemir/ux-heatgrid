@@ -258,10 +258,11 @@ function rectFromAttr(this: Element): DOMRect {
   const [x = 0, y = 0, width = 0, height = 0] = (this.getAttribute('data-rect') ?? '').split(/\s+/).map(Number);
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
 }
+const originalRect = Element.prototype.getBoundingClientRect;
 
 describe('Coach controller (preserved engine, inactive in the product)', () => {
-  beforeEach(() => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(rectFromAttr));
-  afterEach(() => vi.restoreAllMocks());
+  beforeEach(() => { Element.prototype.getBoundingClientRect = rectFromAttr; });
+  afterEach(() => { Element.prototype.getBoundingClientRect = originalRect; vi.restoreAllMocks(); });
 
   const PAGE = `<main data-rect="0 0 1280 2400"><section data-rect="0 0 1280 200">
     ${[1, 2, 3, 4, 5, 6, 7].map((i) => `<button id="b${i}" data-rect="${20 + (i - 1) * 64} 40 60 30">Item ${i}</button>`).join('')}

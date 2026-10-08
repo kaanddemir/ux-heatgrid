@@ -79,8 +79,6 @@ export interface RequestMap {
   SET_RECORDED_LAYERS: { kind: 'cmd'; payload: RecordedLayers; data: TabSnapshot };
   /** Selects a recorded control on a page (outline + scroll on the live page when possible), or clears with null. */
   FOCUS_RECORDED_ELEMENT: { kind: 'cmd'; payload: { page: number; elementId: number | null; scroll: boolean }; data: RecordedFocusResult & { snapshot: TabSnapshot } };
-  /** TEMPORARY debug: run the page analyzer (read-only on the page). */
-  /** TEMPORARY debug: last analysis for the current layout version, or null. */
 }
 export type RequestType = keyof RequestMap;
 

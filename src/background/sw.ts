@@ -162,7 +162,3 @@ chrome.action.onClicked.addListener((tab) => {
   if (tab.windowId === undefined) return;
   chrome.sidePanel.open({ windowId: tab.windowId }).catch((e: unknown) => console.warn('[UX HeatGrid] side panel did not open', e));
 });
-
-chrome.runtime.onInstalled.addListener(() => {
-  console.info(`[UX HeatGrid] service worker installed (build ${BUILD_ID})`);
-});

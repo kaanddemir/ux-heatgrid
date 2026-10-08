@@ -1,19 +1,21 @@
 /**
- * Predict tab. Cool indigo language (outline bands), never heat. Bands only — raw
- * scores never leave the runtime. Summary (band strip, which doubles as the filter) · controls ·
- * inspector rows · footer.
+ * Predict mode of the inspector. Electric-blue accent, never heat. Bands only — raw scores never leave
+ * the runtime, and High / Medium / Low are relative structural assessments of this page, not
+ * probabilities. Layout is the shared inspector frame (see ui.ts).
  */
 import type { PredictionCounts, PredictionSnapshot, TabSnapshot } from '../../shared/model';
 import type { PredictionElementDetails, PredictionSummaryElement, PredictionSummaryResult } from '../../content/prediction/types';
 import { el } from '../shared/render';
 import { icon } from '../shared/icons';
 import { BAND_COPY, CAVEAT_COPY, PREDICTED_EMPTY, confidenceQualifier, reasonText } from '../shared/predictionCopy';
+import { meaningfulRegion } from '../shared/regionLabel';
 import { KIND_COPY, LISTED_BANDS, groupByBand, matchesKind, predictedViewState, rowModel, type Filter, type KindFilter } from './viewModel';
-import { button, check, detailPart, emptyState, filterGroup, filterPopover, footer, loadingState, notice, section } from './ui';
+import { actions, button, detail, detailPart, emptyState, filterGroup, filterPopover, footer, group, inspectorRow, loadingState, more, statGrid, summary, toggle, type NoticeIssue } from './ui';
 
 export interface PredictedModel {
   snap: TabSnapshot | null;
   result: PredictionSummaryResult | null;
+  /** Band filter. */
   filter: Filter;
   /** Item-type filter (Nav, Links, Buttons…). */
   kind?: KindFilter;
@@ -23,7 +25,7 @@ export interface PredictedModel {
   busy: boolean;
   canRun: boolean;
   filterOpen?: boolean;
-  /** Collapsed band sections (ids: `pred-high` …). */
+  /** Collapsed band groups (ids: `pred-high` …). */
   collapsed?: ReadonlySet<string>;
 }
 
@@ -44,27 +46,29 @@ export interface PredictedHandlers {
 /** Progressive disclosure step per result band. */
 export const BAND_ROWS = 5;
 
-/** Screen-head actions once there is a result: Re-run · Show on page (overlay toggle). */
+const hasResult = (m: PredictedModel): boolean => {
+  const k = predictedViewState(m.snap?.prediction as PredictionSnapshot | undefined).kind;
+  return k === 'ready' || k === 'stale';
+};
+
+/** Head actions once there is a result: Re-run · Show on page · Filter (same slots as Record). */
 export function predictedHeadAction(m: PredictedModel, h: PredictedHandlers): HTMLElement | null {
-  const v = predictedViewState(m.snap?.prediction as PredictionSnapshot | undefined);
-  if (v.kind !== 'ready' && v.kind !== 'stale') return null;
-  const show = check('Show on page', m.snap?.interactionView === 'predicted', !m.busy, h.onShowOverlay, 'overlay', 'eye');
-  show.title = 'Show on page'; // the label is visually hidden on very narrow panels
-  return el(
-    'div',
-    { class: 'head-group' },
-    v.kind === 'ready' ? button('Re-run', h.onRun, m.canRun && !m.busy, { key: 'predict-rerun', subtle: true, icon: 'refresh', label: 'Re-run prediction' }) : null,
-    show,
+  if (!hasResult(m)) return null;
+  return actions(
+    toggle('Show on page', m.snap?.interactionView === 'predicted', !m.busy, h.onShowOverlay, 'overlay', 'eye'),
+    m.result ? predictedFilters(m.result, m, h) : null,
   );
 }
 
-/** Immediate Predicted status, rendered once before the screen title. */
-export function predictedNotices(m: PredictedModel, h: PredictedHandlers): HTMLElement[] {
+/** Immediate Predict status, rendered once before the inspector head. */
+export function predictedWarnings(m: PredictedModel, h: PredictedHandlers): NoticeIssue[] {
   const v = predictedViewState(m.snap?.prediction as PredictionSnapshot | undefined);
-  return [
-    v.kind === 'stale' ? notice(v.notice, { action: button('Run again', h.onRun, m.canRun && !m.busy, { key: 'predict-again', subtle: true }) }) : null,
-    m.focusNote ? notice(m.focusNote, { tone: 'info' }) : null,
-  ].filter((n): n is HTMLElement => !!n);
+  const issues: Array<NoticeIssue | null> = [
+    v.kind === 'stale' ? { id: 'prediction-stale', severity: 'action' as const, message: v.notice, detail: 'This prediction may no longer match the page.', action: button('Run again', h.onRun, m.canRun && !m.busy, { key: 'predict-again', subtle: true }) } : null,
+    v.kind === 'error' ? { id: 'prediction-failed', severity: 'critical' as const, message: v.message } : null,
+    m.focusNote ? { id: 'prediction-focus', severity: 'info' as const, message: m.focusNote } : null,
+  ];
+  return issues.filter((issue): issue is NoticeIssue => !!issue);
 }
 
 export function predictedBody(m: PredictedModel, h: PredictedHandlers, bandLimits: ReadonlyMap<string, number>, onMore: (band: string) => void): DocumentFragment | HTMLElement {
@@ -73,138 +77,118 @@ export function predictedBody(m: PredictedModel, h: PredictedHandlers, bandLimit
     case 'empty':
       return emptyState(PREDICTED_EMPTY.title, PREDICTED_EMPTY.body, button(PREDICTED_EMPTY.action, h.onRun, m.canRun && !m.busy, { primary: true, key: 'predict-empty', icon: 'predict' }), 'predict');
     case 'analyzing':
-      return loadingState('Analysing page…', 'predict');
+      return loadingState('Analysing page structure…');
     case 'error':
-      return emptyState('Prediction failed', 'Try again on this page.', button('Try again', h.onRun, m.canRun && !m.busy, { primary: true, key: 'predict-retry', icon: 'refresh' }), 'warn');
+      return emptyState('Prediction failed', 'Try again on this page.', button('Try again', h.onRun, m.canRun && !m.busy, { primary: true, key: 'predict-retry', icon: 'refresh' }), 'warn', 'warn');
     default:
       break;
   }
   const r = m.result;
+  if (!r) return loadingState('Loading results…');
+  // When stale, the notice above carries "Run again"; one re-run affordance at a time.
+  const stale = v.kind === 'stale';
   const frag = document.createDocumentFragment();
-  frag.append(
-    ...[
-      r ? distribution(r.summary) : el('p', { class: 'meta', text: 'Loading…' }),
-      r ? listBlock(r, m, h, bandLimits, onMore) : null,
-      footer(
-        button('Reset prediction', h.onClear, !m.busy, { key: 'clear', danger: true, icon: 'trash' }),
-      ),
-    ].filter((n): n is HTMLElement => !!n),
-  );
+  frag.append(predictionSummary(r.summary), resultGroups(r, m, h, bandLimits, onMore), footer(el('span'), actions(button('Reset prediction', h.onClear, !m.busy, { key: 'clear', danger: true, icon: 'trash' }), stale ? null : button('Re-run prediction', h.onRun, m.canRun && !m.busy, { key: 'predict-rerun', icon: 'refresh' }))));
   return frag;
 }
 
-/** Band strip: proportional bar + counts (summary only — filtering lives in the filter bar). */
-export function distribution(s: Pick<PredictionCounts, 'high' | 'medium' | 'low'>): HTMLElement {
+/** Band bar: proportions at a glance; the cells below carry the numbers. */
+function bandBar(s: Pick<PredictionCounts, 'high' | 'medium' | 'low'>): HTMLElement {
   const total = Math.max(1, s.high + s.medium + s.low);
-  return el(
-    'div',
-    { class: 'dist summary-metrics', attrs: { role: 'img', 'aria-label': `${s.high} High, ${s.medium} Medium, ${s.low} Low` } },
-    el('div', { class: 'dist-bar', attrs: { 'aria-hidden': 'true' } }, ...LISTED_BANDS.map((b) => el('span', { class: 'dist-seg', attrs: { 'data-band': b, style: `flex-grow:${s[b] / total}` } }))),
-    el('div', { class: 'dist-legend' }, ...LISTED_BANDS.map((b) => el('span', { class: s[b] ? 'dist-stat' : 'dist-stat is-zero', attrs: { 'data-band': b } }, el('span', { class: 'dist-n', text: String(s[b]) }), el('span', { class: 'dist-l', text: BAND_COPY[b] })))),
+  return el('div', { class: 'band-bar', attrs: { 'aria-hidden': 'true' } }, ...LISTED_BANDS.map((b) => el('span', { attrs: { 'data-band': b, style: `flex-grow:${s[b] / total}` } })));
+}
+
+/** Predict summary: band bar · High / Medium / Low. Shared with Overview. */
+export function predictionSummary(s: Pick<PredictionCounts, 'high' | 'medium' | 'low'>): HTMLElement {
+  return summary(
+    'Prediction summary',
+    LISTED_BANDS.map((b) => ({ label: BAND_COPY[b], value: String(s[b]), quiet: !s[b], band: b })),
+    { bar: bandBar(s), key: 'pred-summary' },
   );
 }
 
-/** Filter popover: item type only. Bands remain visible as result groups and in the summary. */
+/** Filter popover: Band · Type. */
 export function predictedFilters(r: PredictionSummaryResult, m: PredictedModel, h: PredictedHandlers): HTMLElement | null {
   const kind = m.kind ?? 'all';
-  const listed = r.elements.filter((e) => e.band !== 'not-assessed');
-  const kinds = (Object.keys(KIND_COPY) as Array<Exclude<KindFilter, 'all'>>).map((k) => ({ id: k as KindFilter, text: KIND_COPY[k], count: listed.filter((e) => matchesKind(r, e, k)).length }));
+  const listed = r.elements.filter((e) => e.band !== 'not-assessed' && matchesKind(r, e, kind));
+  const typed = r.elements.filter((e) => e.band !== 'not-assessed' && (m.filter === 'all' || e.band === m.filter));
+  const kinds = (Object.keys(KIND_COPY) as Array<Exclude<KindFilter, 'all'>>).map((k) => ({ id: k as KindFilter, text: KIND_COPY[k], count: typed.filter((e) => matchesKind(r, e, k)).length }));
   return filterPopover(
     'Filter predictions',
-    Number(kind !== 'all'),
+    Number(m.filter !== 'all') + Number(kind !== 'all'),
     !!m.filterOpen,
     h.onToggleFilters,
     h.onResetFilters,
-    h.onKind ? filterGroup<KindFilter>('Type', [{ id: 'all', text: 'All types' }, ...kinds], kind, h.onKind, !m.busy, 'kind', { keep: (Object.keys(KIND_COPY) as Array<Exclude<KindFilter, 'all'>>).filter((k) => listed.some((e) => matchesKind(r, e, k))).length >= 2 }) : null,
+    filterGroup<Filter>('Band', [{ id: 'all', text: 'All' }, ...LISTED_BANDS.map((b) => ({ id: b as Filter, text: BAND_COPY[b], count: listed.filter((e) => e.band === b).length }))], m.filter, h.onFilter, !m.busy, 'band'),
+    h.onKind ? filterGroup<KindFilter>('Type', [{ id: 'all', text: 'All' }, ...kinds], kind, h.onKind, !m.busy, 'kind', { keep: kinds.filter((k) => k.count > 0).length >= 2 }) : null,
   );
 }
 
-function listBlock(r: PredictionSummaryResult, m: PredictedModel, h: PredictedHandlers, limits: ReadonlyMap<string, number>, onMore: (band: string) => void): HTMLElement {
+function resultGroups(r: PredictionSummaryResult, m: PredictedModel, h: PredictedHandlers, limits: ReadonlyMap<string, number>, onMore: (band: string) => void): HTMLElement {
+  const groups = groupByBand(r, m.filter, m.kind ?? 'all').filter(({ items }) => items.length);
   return el(
     'div',
-    { class: 'sections' },
-    // Empty bands add no scanning value; the distribution above already communicates zero counts.
-    ...groupByBand(r, 'all', m.kind ?? 'all').filter(({ items }) => items.length).map(({ band, items }) => {
-      const shown = items.slice(0, limits.get(band) ?? BAND_ROWS);
-      return section(
-        BAND_COPY[band],
-        { count: items.length, band, collapse: collapse(`pred-${band}`, m, h) },
-        el('ul', { class: 'list' }, ...shown.map((e) => rowItem(r, e, m, h))),
-        items.length > shown.length ? button('Show 5 more', () => onMore(band), true, { key: `more-${band}`, subtle: true }) : null,
-      );
-    }),
+    { class: 'groups' },
+    ...(groups.length
+      ? groups.map(({ band, items }) => {
+          const shown = items.slice(0, limits.get(band) ?? BAND_ROWS);
+          return group(
+            BAND_COPY[band],
+            { count: items.length, band, collapse: h.onToggleSection ? { id: `pred-${band}`, collapsed: !!m.collapsed?.has(`pred-${band}`), onToggle: () => h.onToggleSection!(`pred-${band}`) } : undefined },
+            el('ul', { class: 'rows' }, ...shown.map((e) => resultRow(r, e, m, h))),
+            items.length > shown.length ? more(() => onMore(band), `more-${band}`) : null,
+          );
+        })
+      : [el('p', { class: 'no-match', text: 'No elements match these filters.' })]),
   );
 }
 
-function collapse(id: string, m: PredictedModel, h: PredictedHandlers) {
-  return h.onToggleSection ? { id, collapsed: !!m.collapsed?.has(id), onToggle: () => h.onToggleSection!(id) } : undefined;
-}
-
-function rowItem(r: PredictionSummaryResult, e: PredictionSummaryElement, m: PredictedModel, h: PredictedHandlers): HTMLElement {
+function resultRow(r: PredictionSummaryResult, e: PredictionSummaryElement, m: PredictedModel, h: PredictedHandlers): HTMLElement {
   const selected = e.id === m.selectedId;
   const rm = rowModel(r, e);
-  const detailId = `detail-${e.id}`;
-  // Full-row toggle underneath; the visible content sits on top (pointer-transparent), so the
-  // small action can be a real button without nesting buttons.
-  const toggle = el('button', {
-    class: 'item item-toggle',
-    attrs: { type: 'button', 'aria-expanded': String(selected), 'aria-controls': detailId, 'aria-label': `${rm.label} · ${BAND_COPY[e.band]}${rm.meta ? ` · ${rm.meta}` : ''}` },
-    on: { click: () => h.onSelect(e.id) },
-  });
-  toggle.dataset.key = `row-${e.id}`;
-  if (selected) toggle.dataset.selected = '';
   const highlighted = m.snap?.overlay.focusedElementId === e.id;
-  const show = selected
-    ? el('button', {
-        class: highlighted ? 'icon-btn is-on' : 'icon-btn',
-        attrs: { type: 'button', title: highlighted ? 'Clear highlight' : 'Show on page', 'aria-label': highlighted ? 'Clear highlight' : 'Show on page', 'aria-pressed': String(highlighted) },
-        on: { click: () => (highlighted ? h.onClearHighlight() : h.onShowOnPage(e.id)) },
-      }, icon('eye'))
-    : null;
-  if (show) {
-    (show as HTMLButtonElement).disabled = m.busy;
-    show.dataset.key = highlighted ? `hl-${e.id}` : `show-${e.id}`;
-  }
-  return el(
-    'li',
-    {},
-    el(
-      'div',
-      { class: 'item-row', attrs: selected ? { 'data-selected': '' } : {} },
-      toggle,
-      el('span', { class: 'item-main', attrs: { 'aria-hidden': 'true' } }, el('span', { class: 'item-title' }, el('span', { class: 'item-label', text: rm.label }), statusIcon(e, h)), el('span', { class: 'item-meta', text: rm.meta })),
-      show,
-      icon('chevron', 'icon chev'),
-    ),
-    selected ? detailBlock(e, detailId, m) : null,
-  );
+  return inspectorRow({
+    id: String(e.id),
+    key: `row-${e.id}`,
+    label: rm.label,
+    meta: rm.meta,
+    aria: `${rm.label} · ${BAND_COPY[e.band]}${rm.meta ? ` · ${rm.meta}` : ''}`,
+    selected,
+    onToggle: () => h.onSelect(e.id),
+    status: statusMark(e),
+    eye: selected ? { on: highlighted, enabled: !m.busy, key: highlighted ? `hl-${e.id}` : `show-${e.id}`, onClick: () => (highlighted ? h.onClearHighlight() : h.onShowOnPage(e.id)) } : null,
+    detail: selected ? resultDetail(r, e, m) : null,
+  });
 }
 
-/** One quiet icon when confidence is below high or a caveat applies; the tooltip says which. */
-function statusIcon(e: PredictionSummaryElement, h: PredictedHandlers): HTMLElement | null {
+/** One quiet mark when confidence is below high or a caveat applies; the tooltip says which. */
+function statusMark(e: PredictionSummaryElement): HTMLElement | null {
   const q = confidenceQualifier(e.confidence);
   const notes = [q, ...e.caveats.map((c) => CAVEAT_COPY[c])].filter((t): t is string => !!t);
   if (!notes.length) return null;
-  return el('span', { class: q ? 'status-icon is-warn' : 'status-icon', attrs: { title: notes.join('\n') }, on: { click: () => h.onSelect(e.id) } }, icon('info'));
+  return el('span', { class: q ? 'status is-warn' : 'status', attrs: { title: notes.join('\n') } }, icon('info'));
 }
 
-function detailBlock(e: PredictionSummaryElement, id: string, m: PredictedModel): HTMLElement {
+const CONFIDENCE_COPY = { high: 'High', medium: 'Medium', low: 'Low' } as const;
+
+function resultDetail(r: PredictionSummaryResult, e: PredictionSummaryElement, m: PredictedModel): HTMLElement {
   const d = m.details && m.details.element.id === e.id ? m.details : null;
-  const raises = d?.reasons.filter((x) => x.polarity === 'raises') ?? [];
-  const lowers = d?.reasons.filter((x) => x.polarity !== 'raises') ?? [];
-  const reasonList = (items: typeof raises, dir: 'raises' | 'lowers'): HTMLElement[] =>
-    items.map((x) => el('li', { attrs: { 'data-dir': dir } }, el('span', { class: 'sr-only', text: dir === 'raises' ? 'Raises: ' : 'Lowers: ' }), icon(dir === 'raises' ? 'up' : 'down', 'icon dir'), el('span', { text: reasonText(x.code, d?.facts) })));
-  const qualifier = confidenceQualifier(e.confidence);
-  return el(
-    'div',
-    { class: 'detail', attrs: { id, role: 'region', 'aria-label': `Why this prediction: ${e.label ?? e.tagName}` } },
-    !d
-      ? el('p', { class: 'meta', text: 'Loading…' })
-      : el(
-          'div',
-          { class: 'detail-parts' },
-          detailPart('Why', raises.length || lowers.length ? el('ul', { class: 'reasons' }, ...reasonList(raises, 'raises'), ...reasonList(lowers, 'lowers')) : el('p', { class: 'meta', text: 'Typical for this page.' })),
-          qualifier || d.element.caveats.length ? detailPart('Caveats', el('ul', { class: 'reasons caveats' }, ...[qualifier, ...d.element.caveats.map((c) => CAVEAT_COPY[c])].filter((t): t is string => !!t).map((t) => el('li', { text: t })))) : null,
-        ),
+  const name = e.label ?? e.tagName;
+  if (!d) return detail(`Why this prediction: ${name}`, el('p', { class: 'meta', text: 'Loading…' }));
+  const raises = d.reasons.filter((x) => x.polarity === 'raises');
+  const lowers = d.reasons.filter((x) => x.polarity !== 'raises');
+  const reason = (x: (typeof raises)[number], dir: 'raises' | 'lowers'): HTMLElement =>
+    el('li', { attrs: { 'data-dir': dir } }, el('span', { class: 'sr-only', text: dir === 'raises' ? 'Raises: ' : 'Lowers: ' }), icon(dir === 'raises' ? 'up' : 'down', 'icon dir'), el('span', { text: reasonText(x.code, d.facts) }));
+  // Confidence already has its own cell in the grid; Caveats lists only the specific uncertainties.
+  const caveats = d.element.caveats.map((c) => CAVEAT_COPY[c]);
+  const rm = rowModel(r, e);
+  const area = meaningfulRegion(d.regionLabel) ?? rm.area;
+  const structure = statGrid('Structure', [['Band', BAND_COPY[e.band]], ['Type', rm.type], area ? ['Area', area] : null, e.confidence ? ['Confidence', CONFIDENCE_COPY[e.confidence]] : null]);
+  structure.classList.add('structure-grid');
+  return detail(
+    `Why this prediction: ${name}`,
+    structure,
+    detailPart('Why', raises.length || lowers.length ? el('ul', { class: 'reasons' }, ...raises.map((x) => reason(x, 'raises')), ...lowers.map((x) => reason(x, 'lowers'))) : el('p', { class: 'meta', text: 'Typical for this page.' })),
+    caveats.length ? detailPart('Caveats', el('ul', { class: 'caveats' }, ...caveats.map((t) => el('li', { text: t })))) : null,
   );
 }

@@ -1,6 +1,6 @@
 /**
  * Recorded Interaction colour map: a restrained magma/inferno-like warm ramp
- * (transparent → dark purple → magenta → orange → warm yellow). Never the Prediction indigo.
+ * (transparent → dark purple → magenta → orange → warm yellow). Never the Prediction blue.
  * Opacity rises with intensity (see config.ts), so low density stays very transparent and the
  * page underneath stays readable at the top of the scale.
  */
@@ -8,7 +8,7 @@ import { ALPHA_GAMMA, ALPHA_MAX, MIN_INTENSITY } from './config';
 
 /** [position 0–1, r, g, b] */
 export const HEAT_STOPS: ReadonlyArray<readonly [number, number, number, number]> = [
-  [0.0, 96, 18, 96], // dark plum-purple (kept clear of the Predicted indigo)
+  [0.0, 96, 18, 96], // dark plum-purple (kept clear of the Predicted blue)
   [0.3, 140, 41, 129], // magenta-purple
   [0.55, 222, 73, 104], // magenta-red
   [0.8, 254, 159, 109], // orange
