@@ -1,0 +1,9 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Many controls</title><link rel="stylesheet" href="base.css">
+<style>.grid{display:grid;grid-template-columns:repeat(10,1fr);gap:4px;padding:8px}.fake{cursor:pointer;padding:6px;background:#f3f4f6}.fake span{display:block}</style></head><body>
+<main><h1>Dashboard</h1><div class="grid" id="fakes"></div><div class="grid" id="real"></div></main>
+<script>
+const f = document.getElementById('fakes');
+for (let i = 0; i < 450; i++) { const d = document.createElement('div'); d.className = 'fake'; d.innerHTML = '<span>Tile ' + i + '</span>'; f.appendChild(d); }
+const r = document.getElementById('real');
+for (let i = 0; i < 300; i++) { const b = document.createElement('button'); b.textContent = 'Button ' + i; r.appendChild(b); }
+</script></body></html>

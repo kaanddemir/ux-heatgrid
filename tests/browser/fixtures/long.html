@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Long page</title><link rel="stylesheet" href="base.css">
+<style>section{min-height:500px;border-bottom:1px solid #eee}</style></head><body><main id="main"></main>
+<script>
+const main = document.getElementById('main');
+for (let i = 1; i <= 30; i++) {
+  const s = document.createElement('section');
+  s.innerHTML = `<h2 id="h${i}">Chapter ${i}</h2><p>${'Lorem ipsum dolor sit amet. '.repeat(20)}</p><button id="b${i}" class="btn">Action ${i}</button>`;
+  main.appendChild(s);
+}
+</script></body></html>

@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Acme — landing</title><link rel="stylesheet" href="base.css">
+<style>header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd}nav a{margin-left:16px;color:#111}
+.hero{padding:96px 24px;background:#f8fafc}.cards{display:flex;gap:16px}.card{flex:1;padding:24px;border:1px solid #ddd;border-radius:8px}
+footer{background:#111;color:#eee}footer a{color:#eee;margin-right:16px}.deco{height:40px;background:#fafafa}</style></head>
+<body>
+<header><a id="logo" href="/">Acme</a><nav aria-label="Primary"><a id="nav-features" href="#features">Features</a><a href="#pricing">Pricing</a><a href="/docs">Docs</a><a href="/blog">Blog</a><a id="nav-login" href="/login">Log in</a></nav></header>
+<main>
+  <div class="hero"><h1 id="hero-title">Ship design reviews faster</h1>
+    <p id="hero-copy">HeatGrid helps teams inspect interfaces locally, without traffic and without sending data anywhere.</p>
+    <a id="cta" class="btn" href="/signup">Get started</a> <button id="secondary" class="btn secondary">Watch demo</button></div>
+  <div class="deco"></div><div class="deco"></div>
+  <section id="features"><h2 id="h-features">Features</h2>
+    <div class="cards"><div class="card"><h3>Predict</h3><p>Structure-based estimates.</p><a href="/predict">Learn more</a></div>
+    <div class="card"><h3>Record</h3><p>Session heatmaps.</p><a href="/record">Learn more</a></div>
+    <div class="card"><h3>Coach</h3><p>Evidence-based guidance.</p><a href="/coach">Learn more</a></div></div>
+    <div role="tablist"><button role="tab" id="tab-a" aria-selected="true">Monthly</button><button role="tab" id="tab-b">Yearly</button></div>
+    <div id="tabindex-card" tabindex="0" style="padding:12px;border:1px dashed #999">Focusable card</div>
+    <div id="editable" contenteditable="true" style="padding:12px;border:1px solid #999">Editable notes</div>
+  </section>
+  <section id="pricing"><h2>Pricing</h2><p>Simple plans.</p><button id="choose" class="btn">Choose plan</button> <a href="/contact">Contact sales</a></section>
+</main>
+<footer><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/careers">Careers</a></footer>
+</body></html>

@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Checkout</title><link rel="stylesheet" href="base.css">
+<style>form{display:grid;gap:12px;max-width:480px;padding:24px}input,select,textarea{padding:8px;font-size:16px}</style></head><body>
+<main><h1>Checkout</h1>
+<form aria-label="Checkout form" id="checkout">
+  <label for="email">Email address</label><input id="email" type="email" value="SECRET-EMAIL@example.test">
+  <label>Password <input id="pw" type="password" value="SECRET-PASSWORD-123"></label>
+  <input type="hidden" name="csrf" value="SECRET-HIDDEN-TOKEN">
+  <textarea id="notes" aria-label="Order notes">SECRET-TEXTAREA-CONTENT</textarea>
+  <select id="country" aria-label="Country"><option>Other</option><option selected>SECRET-SELECT-VALUE</option></select>
+  <input id="placeholder-only" type="text" placeholder="Search products">
+  <div id="rich" contenteditable="true">SECRET-CONTENTEDITABLE</div>
+  <label><input id="terms" type="checkbox"> Accept terms</label>
+  <input id="submit" type="submit" value="SECRET-SUBMIT-VALUE">
+  <button id="pay" type="submit">Pay now</button>
+</form>
+<p id="long-text"></p>
+</main>
+<script>
+document.getElementById('long-text').textContent = 'BODYSTART ' + 'Long body text that must never be stored in full. '.repeat(400) + ' BODYEND';
+document.getElementById('email').value = 'SECRET-TYPED-EMAIL@example.test';
+</script></body></html>

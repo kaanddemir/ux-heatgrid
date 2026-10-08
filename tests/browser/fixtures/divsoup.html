@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Div soup</title><link rel="stylesheet" href="base.css">
+<style>.row{display:flex;gap:8px;padding:8px}.click{cursor:pointer;padding:8px;background:#eef}.wrap{cursor:pointer}.blk{min-height:400px;padding:16px;border-bottom:1px solid #ddd}</style></head><body>
+<div id="root"><div><div>
+  <div class="blk" id="top"><div class="row"><div class="click" id="fake1"><span>Fake button 1</span></div><div class="click" id="fake2"><span><b>Fake</b> button 2</span></div><div onclick="void 0" id="onclick-div">Onclick div</div></div>
+    <div class="wrap" id="pointer-wrapper"><div><div>Deep text inside pointer wrapper</div><div>Another</div></div></div></div>
+  <div class="blk"><div>Plain text block</div><span>span</span><div><div><div>nested</div></div></div></div>
+  <div class="blk"><div class="row"><div class="click">Fake 3</div><a href="/real">Real link</a></div></div>
+</div></div></div></body></html>
