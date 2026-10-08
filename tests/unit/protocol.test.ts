@@ -3,13 +3,14 @@ import {
   PROTOCOL_VERSION,
   isEnvelope,
   isEvent,
-  isRequest,
   isResponse,
   makeEvent,
   makeRequest,
   validateRequest,
 } from '../../src/shared/protocol';
 import type { TabSnapshot } from '../../src/shared/model';
+
+const isRequest = (x: unknown): boolean => validateRequest(x) === null;
 
 const snapshot: TabSnapshot = {
   buildId: 'b',
@@ -132,9 +133,7 @@ describe('events', () => {
 
   it('accepts prediction events', () => {
     expect(isEvent(makeEvent('PREDICTION_READY', { predictionId: 'p1', summary: { assessed: 1, notAssessed: 0, high: 0, medium: 1, low: 0 } }))).toBe(true);
-    expect(isEvent(makeEvent('PREDICTION_STALE', { predictionId: 'p1', reason: 'resize' }))).toBe(true);
-    expect(isEvent(makeEvent('PREDICTION_STALE', { predictionId: null, reason: 'dom-change' }))).toBe(true);
-    expect(isEvent({ ...makeEvent('PREDICTION_STALE', { predictionId: 'p', reason: 'resize' }), payload: { predictionId: 'p', reason: 'weather' } })).toBe(false);
+    expect(isEvent({ v: PROTOCOL_VERSION, kind: 'event', type: 'PREDICTION_STALE', payload: { predictionId: 'p1', reason: 'resize' } })).toBe(false); // retired
     expect(isEvent({ ...makeEvent('PREDICTION_READY', { predictionId: 'p', summary: { assessed: 0, notAssessed: 0, high: 0, medium: 0, low: 0 } }), payload: { predictionId: 3 } })).toBe(false);
   });
 

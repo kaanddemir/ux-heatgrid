@@ -16,7 +16,8 @@ const buildId = `${pkg.version}+${Date.now().toString(36)}`;
 const common = {
   bundle: true,
   target: 'chrome116',
-  sourcemap: 'linked',
+  // Release builds contain only executable assets. Watch builds keep maps for local debugging.
+  sourcemap: watch ? 'linked' : false,
   minify: false,
   logLevel: 'info',
   legalComments: 'none',
@@ -42,7 +43,6 @@ async function copyStatic() {
     await mkdir(dirname(target), { recursive: true });
     await cp(join(src, from), target);
   }
-  // Icons are plain assets shared with the legacy build; no legacy code is pulled in.
   await cp(join(root, 'icons'), join(dist, 'icons'), { recursive: true });
   await writeFile(join(dist, 'BUILD_ID'), `${buildId}\n`);
 }

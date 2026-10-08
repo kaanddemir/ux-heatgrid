@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fieldnote · Notes that keep up with your team</title>
+<!-- Fictional demo product used only to stage HeatGrid store screenshots. -->
+<style>
+  :root { --ink: #14161b; --muted: #5b616e; --line: #e6e8ec; --bg: #fbfbfc; --brand: #1f2a44; --accent: #2f6f5e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; color: var(--ink); background: var(--bg); }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; cursor: pointer; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 40px; }
+  header { border-bottom: 1px solid var(--line); background: #fff; }
+  .nav { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .logo { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+  .logo i { width: 18px; height: 18px; border-radius: 5px; background: var(--accent); display: inline-block; }
+  .nav nav { display: flex; gap: 24px; color: var(--muted); font-size: 15px; }
+  .nav .end { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 9px 16px; font-size: 15px; font-weight: 500; color: var(--ink); }
+  .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .btn.lg { padding: 13px 22px; font-size: 16px; }
+  .hero { padding: 72px 0 56px; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center; }
+  .eyebrow { font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.08em; }
+  h1 { font-size: 46px; line-height: 1.08; letter-spacing: -0.025em; margin: 12px 0 16px; }
+  .lede { color: var(--muted); font-size: 18px; margin: 0 0 28px; max-width: 30em; }
+  .ctas { display: flex; gap: 12px; }
+  .note { margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .mock { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: 0 18px 40px -24px rgba(20,22,27,.35); }
+  .mock .bar { height: 10px; border-radius: 5px; background: #eceef2; margin: 10px 0; }
+  .mock .bar.s { width: 55%; } .mock .bar.m { width: 78%; }
+  .mock .title { height: 16px; width: 42%; border-radius: 6px; background: #d9dde4; margin-bottom: 16px; }
+  .mock .chip { display: inline-block; height: 22px; width: 64px; border-radius: 11px; background: #e3efe9; margin-right: 6px; margin-top: 12px; }
+  section h2 { font-size: 28px; letter-spacing: -0.015em; margin: 0 0 8px; }
+  section .sub { color: var(--muted); margin: 0 0 28px; }
+  .features { padding: 48px 0; border-top: 1px solid var(--line); }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card p { margin: 0 0 14px; color: var(--muted); font-size: 15px; }
+  .card a { color: var(--accent); font-weight: 600; font-size: 15px; }
+  .pricing { padding: 48px 0 64px; border-top: 1px solid var(--line); }
+  .price { font-size: 30px; font-weight: 700; margin: 6px 0 2px; }
+  .price small { font-size: 14px; color: var(--muted); font-weight: 400; }
+  .card ul { padding-left: 18px; color: var(--muted); font-size: 14px; margin: 12px 0 18px; }
+  .card .btn { width: 100%; }
+  footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--muted); font-size: 14px; }
+  footer .wrap { display: flex; gap: 22px; }
+  footer .wrap span { margin-right: auto; }
+</style>
+</head>
+<body>
+<header><div class="wrap nav">
+  <a class="logo" href="#"><i></i>Fieldnote</a>
+  <nav><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#docs">Docs</a><a href="#changelog">Changelog</a></nav>
+  <div class="end"><a href="#signin">Sign in</a><button class="btn primary" type="button">Get started</button></div>
+</div></header>
+<main>
+  <div class="wrap hero">
+    <div>
+      <div class="eyebrow">Team notes</div>
+      <h1>Notes that keep up with your team.</h1>
+      <p class="lede">Capture decisions, link them to the work and find them again in seconds, without another tool to maintain.</p>
+      <div class="ctas"><button class="btn primary lg" id="trial" type="button">Start free trial</button><button class="btn lg" id="demo" type="button">Watch the demo</button></div>
+      <p class="note">Free for 14 days · No credit card required</p>
+    </div>
+    <div class="mock" aria-hidden="true"><div class="title"></div><div class="bar"></div><div class="bar m"></div><div class="bar s"></div><div class="bar"></div><div class="bar m"></div><span class="chip"></span><span class="chip"></span></div>
+  </div>
+  <section class="features" id="features"><div class="wrap">
+    <h2>Everything in one place</h2>
+    <p class="sub">Write, link and share without switching context.</p>
+    <div class="grid3">
+      <div class="card"><h3>Linked decisions</h3><p>Connect every note to the project it shaped.</p><a href="#linked">Learn more</a></div>
+      <div class="card"><h3>Instant search</h3><p>Find any page, comment or decision as you type.</p><a href="#search">Learn more</a></div>
+      <div class="card"><h3>Shared spaces</h3><p>Give each team a space with its own permissions.</p><a href="#spaces">Learn more</a></div>
+    </div>
+  </div></section>
+  <section class="pricing" id="pricing"><div class="wrap">
+    <h2>Simple pricing</h2>
+    <p class="sub">Start free. Upgrade when your team grows.</p>
+    <div class="grid3">
+      <div class="card"><h3>Starter</h3><div class="price">$0 <small>/ month</small></div><ul><li>Up to 3 members</li><li>Unlimited notes</li></ul><button class="btn" type="button">Choose Starter</button></div>
+      <div class="card"><h3>Team</h3><div class="price">$8 <small>/ member</small></div><ul><li>Shared spaces</li><li>Version history</li></ul><button class="btn primary" type="button">Choose Team</button></div>
+      <div class="card"><h3>Business</h3><div class="price">$14 <small>/ member</small></div><ul><li>SSO and audit log</li><li>Priority support</li></ul><button class="btn" type="button">Contact sales</button></div>
+    </div>
+  </div></section>
+</main>
+<footer><div class="wrap"><span>© Fieldnote (demo)</span><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#status">Status</a></div></footer>
+</body>
+</html>

@@ -171,14 +171,3 @@ export interface LiveCaptureStats {
   deepestScroll: number;
 }
 
-/** GET_SESSION_CAPTURE_SUMMARY: aggregated capture facts — never pointer samples or event lists. */
-export interface SessionCaptureDetails {
-  summary: SessionCaptureSummary;
-  pointer: { samples: number; capacity: number; totalWeightMs: number; coarseCells: number };
-  clickCounts: { pointer: number; activation: number; maybeNotClickable: number; dropped: number };
-  /** Controls with any recorded activity or exposure. */
-  elements: RecordedElementStats[];
-  regions: RecordedRegionStats[];
-  scrollRoots: ScrollRootStats[];
-  timelinePoints: number;
-}

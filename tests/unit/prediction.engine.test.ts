@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { assignBands, confidenceFrom, explainRanking, predict } from '../../src/content/prediction/engine';
+import { assignBands, buildReasons, confidenceFrom, predict } from '../../src/content/prediction/engine';
 import { TERMS, scoreOne, suppressionsFor } from '../../src/content/prediction/heuristic';
-import type { PredictionFeatures, PredictorOutput } from '../../src/content/prediction/types';
+import type { Component, PredictionFeatures, PredictorOutput, ReasonCode, TermId } from '../../src/content/prediction/types';
 import { W } from '../../src/content/prediction/weights';
 import { analyzePage, el, predictPage } from '../helpers/predictPage';
 import { pages } from '../fixtures/predictionPages';
@@ -192,16 +192,57 @@ describe('reasons and explainability', () => {
     expect(el(result, 'foot-0').reasons.map((r) => r.code)).toContain('BELOW_FOLD');
   });
 
-  it('explainRanking answers "why A above B" with component and term differences', () => {
-    const cta = el(result, 'cta');
-    const foot = el(result, 'foot-0');
-    const x = explainRanking(result, foot.elementRef.id, cta.elementRef.id)!;
-    expect(x.higher).toBe(cta.elementRef.id);
-    expect(x.scoreDiff).toBeGreaterThan(0);
-    const compSum = Object.values(x.componentDiffs).reduce((s, v) => s + v, 0);
-    expect(compSum).toBeCloseTo(x.scoreDiff - (cta.score! - foot.score! - x.scoreDiff) * 0, 1);
-    expect(x.termDiffs[0]!.diff).not.toBe(0);
-    expect(explainRanking(result, cta.elementRef.id, 999_999)).toBeNull();
+  it('maps every contribution-backed explanation to the correct term, polarity and component', () => {
+    const cases: Array<[TermId, number, ReasonCode, Component, Partial<PredictionFeatures>?]> = [
+      ['relSize', 0.02, 'LARGE_RELATIVE_SIZE', 'prominence'], ['relSize', -0.02, 'SMALL_RELATIVE_SIZE', 'prominence'],
+      ['firstViewport', 0.02, 'FIRST_VIEWPORT', 'prominence'], ['foldDecay', -0.02, 'LOW_ON_FIRST_SCREEN', 'prominence', { viewportsDown: 0.9 }],
+      ['foldDecay', -0.02, 'BELOW_FOLD', 'prominence', { viewportsDown: 1 }], ['foldDecay', -0.02, 'FAR_DOWN_PAGE', 'prominence', { viewportsDown: 3.01 }],
+      ['contrast', 0.02, 'STRONG_CONTRAST', 'prominence'], ['contrast', -0.02, 'LOW_CONTRAST', 'prominence'],
+      ['fillStrength', 0.02, 'FILLED_STYLE', 'prominence'], ['styleUniqueness', 0.02, 'UNIQUE_STYLE', 'prominence'],
+      ['strongestInGroup', 0.02, 'STRONGEST_IN_GROUP', 'prominence'], ['peers', 0.02, 'FEW_COMPETING_CONTROLS', 'competition'],
+      ['peers', -0.02, 'MANY_COMPETING_CONTROLS', 'competition'], ['peerStrength', -0.02, 'WEAKER_THAN_PEERS', 'competition'],
+      ['regionDensity', -0.02, 'CROWDED_REGION', 'competition'], ['clearance', 0.02, 'VISUALLY_ISOLATED', 'competition'],
+      ['tinyTarget', -0.02, 'TINY_TARGET', 'availability'], ['clipLoss', -0.02, 'PARTLY_CLIPPED', 'availability'],
+      ['opacityLoss', -0.02, 'REDUCED_OPACITY', 'availability'], ['fixed', 0.02, 'FIXED_POSITION', 'context'],
+      ['headingRelation', 0.02, 'NEAR_HEADING', 'context'], ['navCluster', -0.02, 'NAV_CLUSTER', 'context'],
+      ['footer', -0.02, 'FOOTER_CONTEXT', 'context'], ['heuristicDetection', -0.02, 'HEURISTIC_CONTROL', 'context'],
+    ];
+    for (const [feature, contribution, code, component, over = {}] of cases) {
+      const reasons = buildReasons(out(1, 0.3, { contributions: [{ feature, transformedValue: contribution > 0 ? 1 : -1, contribution, component, reliability: 'core' }] }), neutral(over));
+      expect(reasons, code).toEqual([{ code, polarity: contribution > 0 ? 'raises' : 'lowers', component, contribution, reliability: 'core' }]);
+    }
+    const suppressionCodes: ReasonCode[] = ['DISABLED', 'NOT_RENDERED', 'NEAR_INVISIBLE', 'UNUSABLE_GEOMETRY'];
+    const suppressions = buildReasons(out(1, 0.1, { suppressions: suppressionCodes as PredictorOutput['suppressions'] }), neutral());
+    expect(suppressions.map((reason) => reason.code)).toEqual(suppressionCodes);
+    expect(suppressions.every((reason) => reason.polarity === 'suppresses' && reason.component === 'availability')).toBe(true);
+    expect(new Set([...cases.map((entry) => entry[2]), ...suppressionCodes]).size).toBe(28);
+  });
+
+  it('uses exact fold wording boundaries and never calls a first-screen control below the viewport', () => {
+    const foldReason = (viewportsDown: number): ReasonCode | undefined => buildReasons(
+      out(1, 0.3, { contributions: [{ feature: 'foldDecay', transformedValue: -1, contribution: -0.02, component: 'prominence', reliability: 'core' }] }),
+      neutral({ viewportsDown }),
+    )[0]?.code;
+    expect(foldReason(0.999)).toBe('LOW_ON_FIRST_SCREEN');
+    expect(foldReason(1)).toBe('BELOW_FOLD');
+    expect(foldReason(3)).toBe('BELOW_FOLD');
+    expect(foldReason(3.001)).toBe('FAR_DOWN_PAGE');
+  });
+
+  it('keeps valid multi-scale evidence together and filters sub-threshold noise', () => {
+    const contributions = [
+      { feature: 'firstViewport' as const, transformedValue: 0.3, contribution: 0.03, component: 'prominence' as const, reliability: 'core' as const },
+      { feature: 'foldDecay' as const, transformedValue: -0.2, contribution: -0.02, component: 'prominence' as const, reliability: 'core' as const },
+      { feature: 'peers' as const, transformedValue: 0.3, contribution: 0.02, component: 'competition' as const, reliability: 'core' as const },
+      { feature: 'regionDensity' as const, transformedValue: -0.5, contribution: -0.02, component: 'competition' as const, reliability: 'core' as const },
+      { feature: 'clearance' as const, transformedValue: 0.4, contribution: 0.02, component: 'competition' as const, reliability: 'heuristic' as const },
+      { feature: 'fixed' as const, transformedValue: 1, contribution: W.REASON_MIN_CONTRIBUTION - 0.000001, component: 'context' as const, reliability: 'core' as const },
+    ];
+    const reasons = buildReasons(out(1, 0.3, { contributions }), neutral({ viewportsDown: 0.9 }));
+    expect(reasons.map((reason) => reason.code)).toEqual(['FIRST_VIEWPORT', 'CROWDED_REGION', 'FEW_COMPETING_CONTROLS', 'LOW_ON_FIRST_SCREEN', 'VISUALLY_ISOLATED']);
+    expect(reasons.every((reason) => Math.abs(reason.contribution) >= W.REASON_MIN_CONTRIBUTION)).toBe(true);
+    const atThreshold = buildReasons(out(1, 0.3, { contributions: [{ feature: 'fixed', transformedValue: 1, contribution: W.REASON_MIN_CONTRIBUTION, component: 'context', reliability: 'core' }] }), neutral());
+    expect(atThreshold.map((reason) => reason.code)).toEqual(['FIXED_POSITION']);
   });
 });
 

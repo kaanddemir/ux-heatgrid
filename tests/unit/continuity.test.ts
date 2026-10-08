@@ -18,8 +18,9 @@ function rectFromAttr(this: Element): DOMRect {
   const [x = 0, y = 0, width = 0, height = 0] = (this.getAttribute('data-rect') ?? '').split(/\s+/).map(Number);
   return { x, y, width, height, top: y, left: x, right: x + width, bottom: y + height, toJSON: () => ({}) } as DOMRect;
 }
-beforeEach(() => vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(rectFromAttr));
-afterEach(() => vi.restoreAllMocks());
+const originalRect = Element.prototype.getBoundingClientRect;
+beforeEach(() => { Element.prototype.getBoundingClientRect = rectFromAttr; });
+afterEach(() => { Element.prototype.getBoundingClientRect = originalRect; vi.restoreAllMocks(); });
 
 const trusted = <E extends Event>(e: E): E => (Object.defineProperty(e, 'isTrusted', { value: true }), e);
 class NoIO {

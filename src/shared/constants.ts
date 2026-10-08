@@ -53,3 +53,6 @@ export const REC_TAG = 'heatgrid-rec';
 
 /** runtime.connect port name for recording continuity (content ↔ service worker, page boundaries only). */
 export const RECORDING_PORT = 'hg-recording';
+/** tabs.connect port name: the side panel holds one per tab it works with. When the panel closes,
+ * Chrome disconnects it and the runtime hides its page visualization. */
+export const PANEL_PORT = 'hg-panel';

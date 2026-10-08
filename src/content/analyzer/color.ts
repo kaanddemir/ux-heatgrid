@@ -102,13 +102,6 @@ export function composite(top: RGBA, bottom: RGBA): RGBA {
   return { r: mix(top.r, bottom.r), g: mix(top.g, bottom.g), b: mix(top.b, bottom.b), a };
 }
 
-/** Composites layers listed top-first onto an opaque base. */
-export function compositeStack(layersTopFirst: readonly RGBA[], base: RGBA): RGBA {
-  let out = base;
-  for (let i = layersTopFirst.length - 1; i >= 0; i--) out = composite(layersTopFirst[i]!, out);
-  return out;
-}
-
 export function srgbToLinear(c255: number): number {
   const c = c255 / 255;
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;

@@ -4,7 +4,7 @@
  * nothing here is page-type specific in the engine.
  */
 import { describe, expect, it } from 'vitest';
-import { baselineRanking, type BaselineId } from '../../src/content/prediction/baselines';
+import { baselineRanking, type BaselineId } from '../helpers/baselines';
 import type { PredictionResult } from '../../src/content/prediction/types';
 import { el, predictPage } from '../helpers/predictPage';
 import { pages, type PageName } from '../fixtures/predictionPages';

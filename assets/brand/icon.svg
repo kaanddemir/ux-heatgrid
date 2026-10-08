@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- HeatGrid mark: a 3×3 page grid (structure, blue) warming to one hot cell (interaction, coral).
+       Chrome guidance: 96×96 artwork centred on a 128×128 canvas. -->
+  <rect x="16.75" y="16.75" width="94.5" height="94.5" rx="23.25" fill="#0D0F13" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.5"/>
+  <g>
+    <rect x="34" y="34" width="16" height="16" rx="4" fill="#397BFA" opacity="0.36"/>
+    <rect x="56" y="34" width="16" height="16" rx="4" fill="#397BFA" opacity="0.36"/>
+    <rect x="78" y="34" width="16" height="16" rx="4" fill="#397BFA" opacity="0.68"/>
+    <rect x="34" y="56" width="16" height="16" rx="4" fill="#397BFA" opacity="0.36"/>
+    <rect x="56" y="56" width="16" height="16" rx="4" fill="#397BFA"/>
+    <rect x="78" y="56" width="16" height="16" rx="4" fill="#FF6B57" opacity="0.72"/>
+    <rect x="34" y="78" width="16" height="16" rx="4" fill="#397BFA" opacity="0.68"/>
+    <rect x="56" y="78" width="16" height="16" rx="4" fill="#FF6B57" opacity="0.72"/>
+    <rect x="78" y="78" width="16" height="16" rx="4" fill="#FF6B57"/>
+  </g>
+</svg>

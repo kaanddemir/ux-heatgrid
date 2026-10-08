@@ -229,18 +229,6 @@ export function deriveRenderFacts(input: {
   };
 }
 
-function overlap1d(a0: number, a1: number, b0: number, b1: number): number {
-  return Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
-}
-
-export function visibleFraction(rect: Rect, clip: Rect): number {
-  const area = rect.width * rect.height;
-  if (area <= 0) return 0;
-  const w = overlap1d(rect.x, rect.x + rect.width, clip.x, clip.x + clip.width);
-  const h = overlap1d(rect.y, rect.y + rect.height, clip.y, clip.y + clip.height);
-  return (w * h) / area;
-}
-
 export function intersect(a: Rect, b: Rect): Rect {
   const x = Math.max(a.x, b.x);
   const y = Math.max(a.y, b.y);

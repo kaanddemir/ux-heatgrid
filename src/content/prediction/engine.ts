@@ -8,7 +8,6 @@ import { heuristicV1 } from './heuristic';
 import type {
   Band,
   CaveatCode,
-  Component,
   Confidence,
   ElementPrediction,
   FeatureContribution,
@@ -88,7 +87,11 @@ function reasonCode(c: FeatureContribution, f: PredictionFeatures): ReasonCode |
     relSize: () => (up ? 'LARGE_RELATIVE_SIZE' : 'SMALL_RELATIVE_SIZE'),
     areaPercentile: () => (up ? 'LARGE_RELATIVE_SIZE' : 'SMALL_RELATIVE_SIZE'),
     firstViewport: () => (up ? 'FIRST_VIEWPORT' : null),
-    foldDecay: () => (up ? null : (f.viewportsDown ?? 0) > 3 ? 'FAR_DOWN_PAGE' : 'BELOW_FOLD'),
+    foldDecay: () => {
+      if (up) return null;
+      const viewports = f.viewportsDown ?? 0;
+      return viewports < 1 ? 'LOW_ON_FIRST_SCREEN' : viewports > 3 ? 'FAR_DOWN_PAGE' : 'BELOW_FOLD';
+    },
     contrast: () => (up ? 'STRONG_CONTRAST' : 'LOW_CONTRAST'),
     fillStrength: () => (up ? 'FILLED_STYLE' : null),
     bordered: () => null,
@@ -284,44 +287,3 @@ export function predict(analysis: FullAnalysisResult, options: PredictOptions = 
   };
 }
 
-// ---------------------------------------------------------------------------
-// Engineering diagnostics (not user-facing)
-// ---------------------------------------------------------------------------
-
-export interface RankExplanation {
-  higher: number;
-  lower: number;
-  scoreDiff: number;
-  componentDiffs: Record<Component, number>;
-  /** Term-level differences (higher minus lower), largest first. */
-  termDiffs: Array<{ feature: TermId; diff: number }>;
-  suppressedLower: boolean;
-}
-
-/** Why did element A rank above element B (or vice versa)? */
-export function explainRanking(result: PredictionResult, aId: number, bId: number): RankExplanation | null {
-  const a = result.elements.find((e) => e.elementRef.id === aId);
-  const b = result.elements.find((e) => e.elementRef.id === bId);
-  if (!a?.components || !b?.components || a.rank === null || b.rank === null) return null;
-  const [hi, lo] = a.rank <= b.rank ? [a, b] : [b, a];
-  const terms = new Map<TermId, number>();
-  for (const c of hi.contributions) terms.set(c.feature, (terms.get(c.feature) ?? 0) + c.contribution);
-  for (const c of lo.contributions) terms.set(c.feature, (terms.get(c.feature) ?? 0) - c.contribution);
-  const r = (n: number): number => Math.round(n * 1e4) / 1e4;
-  return {
-    higher: hi.elementRef.id,
-    lower: lo.elementRef.id,
-    scoreDiff: r(hi.score! - lo.score!),
-    componentDiffs: {
-      prominence: r(hi.components!.prominence - lo.components!.prominence),
-      competition: r(hi.components!.competition - lo.components!.competition),
-      availability: r(hi.components!.availability - lo.components!.availability),
-      context: r(hi.components!.context - lo.components!.context),
-    },
-    termDiffs: [...terms.entries()]
-      .map(([feature, diff]) => ({ feature, diff: r(diff) }))
-      .filter((t) => t.diff !== 0)
-      .sort((x, y) => Math.abs(y.diff) - Math.abs(x.diff) || x.feature.localeCompare(y.feature)),
-    suppressedLower: lo.reasons.some((x) => x.polarity === 'suppresses'),
-  };
-}

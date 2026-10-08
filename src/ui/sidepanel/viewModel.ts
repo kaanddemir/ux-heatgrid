@@ -61,7 +61,10 @@ export function groupByBand(r: PredictionSummaryResult, filter: Filter, kind: Ki
 
 export interface RowModel {
   label: string;
+  /** Collapsed-row meta: the element type only ("Button"). The page area lives in `area`. */
   meta: string;
+  type: string;
+  area: string | null;
   /** null for high confidence (no extra label). */
   qualifier: string | null;
   preview: { direction: 'raises' | 'lowers'; text: string } | null;
@@ -69,15 +72,17 @@ export interface RowModel {
 
 const TAG_TYPE: Record<string, string> = { a: 'Link', button: 'Button', input: 'Input', select: 'Select', textarea: 'Textarea' };
 
-export function rowModel(_r: PredictionSummaryResult, e: PredictionSummaryElement): RowModel {
-  // List presentation stays deliberately terse. Region remains in the source result for filters,
-  // prediction details, but is not repeated in the normal inspector row.
+export function rowModel(r: PredictionSummaryResult, e: PredictionSummaryElement): RowModel {
+  // Row meta answers "what is it" only; the named page area is kept for the expanded detail.
   const type = TAG_TYPE[e.tagName.toLowerCase()] ?? (e.controlType ? CONTROL_TYPE_COPY[e.controlType] : e.tagName);
+  const area = e.regionId === null ? null : meaningfulRegion(r.regions.find((g) => g.regionId === e.regionId)?.label);
   const first = e.topReasons[0];
   const sourceLabel = e.label ?? `Unlabelled ${e.tagName}`;
   return {
     label: cleanSubject(sourceLabel),
     meta: type,
+    type,
+    area,
     qualifier: confidenceQualifier(e.confidence),
     preview: first ? { direction: first.polarity === 'raises' ? 'raises' : 'lowers', text: reasonText(first.code) } : null,
   };

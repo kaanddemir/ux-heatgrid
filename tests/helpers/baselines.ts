@@ -2,8 +2,8 @@
  * Trivial ranking baselines — ENGINEERING CALIBRATION ONLY, never product predictors.
  * Used by tests to check that heuristic-v1 does more than "pick the largest thing near the top".
  */
-import type { FullAnalysisResult } from '../analyzer/types';
-import { isAssessable } from './features';
+import type { FullAnalysisResult } from '../../src/content/analyzer/types';
+import { isAssessable } from '../../src/content/prediction/features';
 
 export type BaselineId = 'dom-order' | 'size-only' | 'size-first-viewport';
 

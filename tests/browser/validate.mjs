@@ -533,9 +533,16 @@ try {
       });
     });
     const panel = await h.triggerAction(page);
-    await panel.click('button[data-key="ov-record"]');
+    // Overview Record is an accordion: expand it (only if collapsed), then Start.
+    const startRecord = async () => {
+      if ((await panel.eval(`document.querySelector('[data-key="ov-record"]')?.getAttribute('aria-expanded')`)) !== 'true') await panel.click('button[data-key="ov-record"]');
+      for (let i = 0; i < 30 && !(await panel.eval(`!!document.querySelector('[data-key="ov-start-record"]:not(:disabled)')`)); i++) await sleep(100);
+      await panel.click('button[data-key="ov-start-record"]');
+    };
+    const liveText = () => panel.eval(`[...document.querySelectorAll('.live')].map((e) => e.innerText).join(' ')`);
+    await startRecord();
     await sleep(3200);
-    const bar0 = await panel.eval(`[...document.querySelectorAll('.rec-bar, .stop-tile, [data-key="ov-go-recorded"]')].map((e) => e.innerText).join(' ')`);
+    const bar0 = await liveText();
     check('phase1', 'panel Record injects and records; recording bar shows elapsed', /Recording/.test(bar0) && /\b[23]s\b/.test(bar0), bar0.replace(/\n+/g, ' | '));
     let events = await h.sw.evaluate(() => globalThis.__events);
     const states = events.filter((e) => e.type === 'STATE_CHANGED').map((e) => e.state);
@@ -554,10 +561,9 @@ try {
 
     // Side panel follows runtime
     await panel.click('button[data-key="nav-overview"]');
-    for (let i = 0; i < 30 && !(await panel.eval(`!!document.querySelector('[data-key="ov-record"]:not(:disabled)')`)); i++) await sleep(100);
-    await panel.click('button[data-key="ov-record"]');
+    await startRecord();
     await sleep(1300);
-    const bar = await panel.eval(`[...document.querySelectorAll('.rec-bar, .stop-tile, [data-key="ov-go-recorded"]')].map((e) => e.innerText).join(' ')`);
+    const bar = await liveText();
     check('phase1', 'side panel Record + recording bar follows runtime', /Recording/.test(bar) && /\b[12]s\b/.test(bar), bar.replace(/\n+/g, ' | '));
 
     // Repeated injection must not duplicate listeners/controllers.

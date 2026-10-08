@@ -10,10 +10,11 @@ const HOST_STYLE = ['all: initial', 'position: fixed', 'top: 0', 'left: 0', 'wid
   .join('; ');
 
 const CSS = `
-.rec { position: fixed; left: 12px; bottom: 12px; pointer-events: none; display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 8px; border-radius: 6px; background: rgba(15, 17, 32, 0.88); color: #fff; border: 1px solid rgba(255,255,255,0.28);
-  font: 600 11px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 0.04em; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: #e5484d; }
+.rec { position: fixed; left: 14px; bottom: 14px; pointer-events: none; display: inline-flex; align-items: center; gap: 7px;
+  height: 26px; padding: 0 10px 0 9px; border-radius: 8px; background: rgba(13, 15, 19, 0.9); color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22), 0 1px 2px rgba(0, 0, 0, 0.24);
+  font: 650 11px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: 0.06em; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #ff6b57; box-shadow: 0 0 0 3px rgba(255, 107, 87, 0.28); }
 `;
 
 export function createRecIndicator(doc: Document = document): { remove(): void } {

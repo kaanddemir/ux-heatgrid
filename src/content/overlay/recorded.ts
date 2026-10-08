@@ -363,8 +363,11 @@ const PILL_EDGE = 'rgba(255, 255, 255, 0.14)';
 const LEGEND_BAND = 88;
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
+/** Same 6px corner as the dock's buttons (root.ts), not a full capsule. */
+const PILL_RADIUS = 6;
+
 function pillPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
-  const r = Math.min(h / 2, w / 2);
+  const r = Math.min(PILL_RADIUS, h / 2, w / 2);
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);
@@ -442,7 +445,7 @@ function drawScrollLine(ctx: CanvasRenderingContext2D, y: number, width: number,
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
   ctx.stroke();
   ctx.setLineDash([]);
-  const text = 'Deepest scroll';
+  const text = 'Deepest Scroll';
   ctx.font = `500 10.5px ${FONT}`;
   const h = 18;
   const w = Math.ceil(ctx.measureText(text).width) + 14;
