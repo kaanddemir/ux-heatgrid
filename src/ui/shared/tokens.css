@@ -3,11 +3,11 @@
  *
  * Colour carries meaning only:
  *   --pred  Predict (electric blue)   --heat  Record (coral) — also the live-recording indicator
- *   Each accent has three roles: solid (fills; --on-accent text on top), -fg (text / icons on
- *   surfaces), -soft (tinted selected surfaces). --danger is rose so Record never reads as an error.
+ *   Identity accents remain #397BFA / #FF6B57. Solid actions use darker semantic action tokens so
+ *   white labels and icons meet AA; -fg and -soft cover content on neutral surfaces.
  *   --band-* Predict bands — the same colours as the on-page outlines, so the panel is the legend
  *   neutrals: navigation, surfaces, text — true greys / near-black, no blue cast.
- *   Every screen / panel sets data-kind → --kind / --kind-fg / --kind-soft / --kind-on.
+ *   Every screen / panel sets data-kind → identity, surface and solid-action tokens.
  *
  * Structure (ui.ts): notices · inspector head · summary · result groups (rows + detail) · footer.
  * Scale: type 11 / 12 / 13 / 15 / 19 · space 4 / 8 / 12 / 16 / 24 · radius 4 / 6 / 8.
@@ -41,16 +41,25 @@
   --danger-soft: rgba(190, 24, 93, 0.08);
   --warn: #8f5400;
   --warn-soft: rgba(214, 140, 20, 0.14);
-  --ok: #127346;
 
-  /* identity: solid (fills) · -fg (text / icons on surfaces) · -soft (selected surfaces) */
-  --pred: #2a6ae6;
+  /* identity accents */
+  --pred: #397bfa;
   --pred-fg: #1f5fd6;
   --pred-soft: rgba(57, 123, 250, 0.1);
-  --heat: #d13d2a;
+  --heat: #ff6b57;
   --heat-fg: #c2381f;
   --heat-soft: rgba(255, 107, 87, 0.12);
-  --on-accent: #ffffff;
+  /* solid actions: every fill state is at least 4.5:1 against white */
+  --action-fg: #ffffff;
+  --pred-action: #2a6ae6;
+  --pred-action-hover: #1f5fd6;
+  --pred-action-pressed: #1e56bd;
+  --heat-action: #d13d2a;
+  --heat-action-hover: #c2381f;
+  --heat-action-pressed: #b33629;
+  --neutral-action: #3d414a;
+  --neutral-action-hover: #2e3138;
+  --neutral-action-pressed: #25272d;
   --band-high: #2a6ae6;
   --band-medium: #0b8475;
   --band-low: #a3681a;
@@ -69,10 +78,8 @@
   --motion-instant: 70ms;
   --motion-fast: 120ms;
   --motion-standard: 180ms;
-  --motion-moderate: 240ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-enter: cubic-bezier(0, 0, 0.2, 1);
-  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -94,23 +101,19 @@
     --danger-soft: rgba(244, 114, 182, 0.11);
     --warn: #f0b860;
     --warn-soft: rgba(240, 184, 96, 0.12);
-    --ok: #5fd896;
-    --pred: #397bfa;
     --pred-fg: #6fa0ff;
     --pred-soft: rgba(57, 123, 250, 0.15);
-    --heat: #ff6b57;
     --heat-fg: #ff6b57;
     --heat-soft: rgba(255, 107, 87, 0.13);
-    --on-accent: #0d0f13;
     --band-high: #5b93ff;
     --band-medium: #3cc4b0;
     --band-low: #dca85c;
   }
 }
 
-[data-kind='predicted'] { --kind: var(--pred); --kind-fg: var(--pred-fg); --kind-soft: var(--pred-soft); --kind-on: var(--on-accent); }
-[data-kind='recorded'] { --kind: var(--heat); --kind-fg: var(--heat-fg); --kind-soft: var(--heat-soft); --kind-on: var(--on-accent); }
-[data-kind='overview'] { --kind: var(--text); --kind-fg: var(--text); --kind-soft: var(--hover); --kind-on: var(--bg); }
+[data-kind='predicted'] { --kind: var(--pred); --kind-fg: var(--pred-fg); --kind-soft: var(--pred-soft); --action-bg: var(--pred-action); --action-hover: var(--pred-action-hover); --action-pressed: var(--pred-action-pressed); }
+[data-kind='recorded'] { --kind: var(--heat); --kind-fg: var(--heat-fg); --kind-soft: var(--heat-soft); --action-bg: var(--heat-action); --action-hover: var(--heat-action-hover); --action-pressed: var(--heat-action-pressed); }
+[data-kind='overview'] { --kind: var(--text); --kind-fg: var(--text); --kind-soft: var(--hover); --action-bg: var(--neutral-action); --action-hover: var(--neutral-action-hover); --action-pressed: var(--neutral-action-pressed); }
 
 /* ------------------------------------------------------------------ base */
 html, body { margin: 0; overflow-x: hidden; }
@@ -165,12 +168,13 @@ button { cursor: pointer; }
 .btn:active:not(:disabled), .icon-btn:active:not(:disabled), .toggle:active, .choice:active:not(:disabled) { transition-duration: var(--motion-instant); }
 .btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; }
 .btn .icon { width: 14px; height: 14px; }
-.btn.is-primary { border-color: transparent; background: var(--kind, var(--text)); color: var(--kind-on, var(--bg)); }
-.btn.is-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--kind, var(--text)) 88%, var(--text)); }
-.btn.is-primary:active:not(:disabled) { background: color-mix(in srgb, var(--kind, var(--text)) 78%, var(--text)); }
+.btn.is-primary { border-color: transparent; background: var(--action-bg, var(--neutral-action)); color: var(--action-fg); }
+.btn.is-primary:hover:not(:disabled) { background: var(--action-hover, var(--neutral-action-hover)); }
+.btn.is-primary:active:not(:disabled) { background: var(--action-pressed, var(--neutral-action-pressed)); }
 /* Stop is a Record action, not a destructive one: the coral solid with a square glyph. */
-.btn.is-stop { border-color: transparent; background: var(--heat); color: var(--on-accent); }
-.btn.is-stop:hover:not(:disabled) { background: color-mix(in srgb, var(--heat) 88%, var(--text)); }
+.btn.is-stop { border-color: transparent; background: var(--heat-action); color: var(--action-fg); }
+.btn.is-stop:hover:not(:disabled) { background: var(--heat-action-hover); }
+.btn.is-stop:active:not(:disabled) { background: var(--heat-action-pressed); }
 .btn.is-subtle { border-color: transparent; background: transparent; color: var(--text-2); }
 .btn.is-subtle:hover:not(:disabled) { background: var(--hover); color: var(--text); }
 .btn.is-danger { border-color: transparent; background: transparent; color: var(--muted); }
@@ -266,16 +270,15 @@ button.group-head:hover .chev { color: var(--text); }
 .status .icon { width: 13px; height: 13px; }
 .status.is-warn { color: var(--warn); }
 
-.detail { display: grid; gap: 12px; margin: 0 8px 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); }
+/* Expanded row content belongs to the list surface: no inset card inside .group-body. */
+.detail { display: grid; gap: 12px; margin: 0; padding: 12px 12px 14px; }
 .detail-part { display: grid; gap: 4px; }
 .detail-label { color: var(--muted); font-size: var(--fs-xs); font-weight: 600; }
-.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
-.stat { display: grid; gap: 1px; min-width: 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; gap: 10px 12px; }
+.stat { display: grid; grid-template-rows: auto auto; align-content: center; justify-items: center; gap: 2px; min-width: 0; text-align: center; }
 .stat dt { color: var(--muted); font-size: var(--fs-xs); }
 .stat dd { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.structure-grid { align-items: start; }
-.structure-grid .stat { grid-template-rows: auto auto; align-content: start; justify-items: center; gap: 2px; text-align: center; }
-.structure-grid .stat > * { width: 100%; }
+.stat > * { width: 100%; }
 .reasons { display: grid; gap: 4px; }
 .reasons li { display: flex; align-items: flex-start; gap: 6px; color: var(--text-2); font-size: var(--fs-sm); }
 .icon.dir { width: 13px; height: 13px; margin-top: 2px; }
@@ -292,7 +295,7 @@ button.group-head:hover .chev { color: var(--text); }
 .filter { position: relative; }
 .filter-trigger.is-active { border-color: color-mix(in srgb, var(--kind-fg) 45%, transparent); background: var(--kind-soft); color: var(--kind-fg); }
 .filter.is-open .filter-trigger { background: var(--surface-2); }
-.filter-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--kind); color: var(--kind-on); font-size: 10px; font-weight: 700; }
+.filter-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--action-bg); color: var(--action-fg); font-size: 10px; font-weight: 700; }
 .popover { container: pop / inline-size; position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; display: flex; flex-direction: column; width: min(296px, calc(100vw - 2 * var(--gutter))); padding: 0 12px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--line-2); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow-pop); }
 .popover.is-entering { animation: popover-enter var(--motion-standard) var(--ease-enter) both; }
 @keyframes popover-enter { from { opacity: 0; transform: translateY(-2px); } }
@@ -422,6 +425,6 @@ button.group-head:hover .chev { color: var(--text); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --motion-instant: 1ms; --motion-fast: 1ms; --motion-standard: 1ms; --motion-moderate: 1ms; }
+  :root { --motion-instant: 1ms; --motion-fast: 1ms; --motion-standard: 1ms; }
   .spinner { animation: none; }
 }

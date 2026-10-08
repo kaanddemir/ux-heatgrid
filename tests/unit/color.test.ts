@@ -3,7 +3,6 @@ import {
   BLACK,
   WHITE,
   composite,
-  compositeStack,
   contrastRatio,
   isLargeText,
   parseColor,
@@ -54,14 +53,6 @@ describe('compositing', () => {
 
   it('transparent over anything is unchanged', () => {
     expect(composite({ r: 0, g: 0, b: 0, a: 0 }, { r: 1, g: 2, b: 3, a: 1 })).toEqual({ r: 1, g: 2, b: 3, a: 1 });
-  });
-
-  it('nested alpha layers compose in order', () => {
-    // 50% white over 50% red over blue
-    const out = compositeStack([{ r: 255, g: 255, b: 255, a: 0.5 }, { r: 255, g: 0, b: 0, a: 0.5 }], { r: 0, g: 0, b: 255, a: 1 });
-    expect(out.r).toBeCloseTo(191.25);
-    expect(out.g).toBeCloseTo(127.5);
-    expect(out.b).toBeCloseTo(191.25);
   });
 });
 

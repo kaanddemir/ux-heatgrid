@@ -172,7 +172,7 @@ function statusMark(e: PredictionSummaryElement): HTMLElement | null {
 const CONFIDENCE_COPY = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 
 function resultDetail(r: PredictionSummaryResult, e: PredictionSummaryElement, m: PredictedModel): HTMLElement {
-  const d = m.details && m.details.element.id === e.id ? m.details : null;
+  const d = m.details && m.details.predictionId === r.predictionId && m.details.element.id === e.id ? m.details : null;
   const name = e.label ?? e.tagName;
   if (!d) return detail(`Why this prediction: ${name}`, el('p', { class: 'meta', text: 'Loading…' }));
   const raises = d.reasons.filter((x) => x.polarity === 'raises');
@@ -181,13 +181,12 @@ function resultDetail(r: PredictionSummaryResult, e: PredictionSummaryElement, m
     el('li', { attrs: { 'data-dir': dir } }, el('span', { class: 'sr-only', text: dir === 'raises' ? 'Raises: ' : 'Lowers: ' }), icon(dir === 'raises' ? 'up' : 'down', 'icon dir'), el('span', { text: reasonText(x.code, d.facts) }));
   // Confidence already has its own cell in the grid; Caveats lists only the specific uncertainties.
   const caveats = d.element.caveats.map((c) => CAVEAT_COPY[c]);
+  if (m.snap?.prediction.state === 'stale') caveats.unshift('Page changed — these reasons describe the earlier analysis');
   const rm = rowModel(r, e);
   const area = meaningfulRegion(d.regionLabel) ?? rm.area;
-  const structure = statGrid('Structure', [['Band', BAND_COPY[e.band]], ['Type', rm.type], area ? ['Area', area] : null, e.confidence ? ['Confidence', CONFIDENCE_COPY[e.confidence]] : null]);
-  structure.classList.add('structure-grid');
   return detail(
     `Why this prediction: ${name}`,
-    structure,
+    statGrid('Structure', [['Band', BAND_COPY[e.band]], ['Type', rm.type], area ? ['Area', area] : null, e.confidence ? ['Confidence', CONFIDENCE_COPY[e.confidence]] : null]),
     detailPart('Why', raises.length || lowers.length ? el('ul', { class: 'reasons' }, ...raises.map((x) => reason(x, 'raises')), ...lowers.map((x) => reason(x, 'lowers'))) : el('p', { class: 'meta', text: 'Typical for this page.' })),
     caveats.length ? detailPart('Caveats', el('ul', { class: 'caveats' }, ...caveats.map((t) => el('li', { text: t })))) : null,
   );

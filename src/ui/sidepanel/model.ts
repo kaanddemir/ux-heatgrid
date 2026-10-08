@@ -54,33 +54,3 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
-export const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
-
-export interface OverviewModel {
-  predicted: { line: string; stale: boolean } | null;
-  recorded: { line: string } | null;
-  recording: { state: 'preparing' | 'recording' | 'processing'; pages: number } | null;
-}
-
-export function overviewModel(snap: TabSnapshot | null): OverviewModel {
-  const p = snap?.prediction;
-  const predicted =
-    p && (p.state === 'ready' || p.state === 'stale') && p.summary
-      ? { line: `${p.summary.high} High · ${p.summary.medium} Medium · ${p.summary.low} Low`, stale: p.state === 'stale' }
-      : null;
-  const s = snap?.session;
-  const r = s?.result && s.result.kind === 'capture' ? s.result : null;
-  let recorded: OverviewModel['recorded'] = null;
-  if (s?.state === 'ready' && r) {
-    const clicks = r.clicks + r.activations;
-    recorded = {
-      line:
-        r.pages > 1
-          ? `${formatDuration(r.elapsedMs)} · ${r.pages} pages · ${plural(clicks, 'click')}`
-          : `${formatDuration(r.elapsedMs)} · ${plural(clicks, 'click')}${r.deepestScroll !== null ? ` · ${Math.round(r.deepestScroll * 100)}% scroll` : ''}`,
-    };
-  }
-  const st = s?.state;
-  const recording = st === 'preparing' || st === 'recording' || st === 'processing' ? { state: st, pages: s?.recording?.segmentCount ?? 1 } : null;
-  return { predicted, recorded, recording };
-}

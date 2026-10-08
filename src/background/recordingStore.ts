@@ -133,5 +133,3 @@ export function createRecordingStore(storage: StorageLike, budget = SESSION_BUDG
     }),
   };
 }
-
-export type RecordingStore = ReturnType<typeof createRecordingStore>;

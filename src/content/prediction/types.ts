@@ -154,6 +154,7 @@ export type RaiseReason =
   | 'NEAR_HEADING'
   | 'FIXED_POSITION';
 export type LowerReason =
+  | 'LOW_ON_FIRST_SCREEN'
   | 'BELOW_FOLD'
   | 'FAR_DOWN_PAGE'
   | 'SMALL_RELATIVE_SIZE'

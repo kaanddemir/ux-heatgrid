@@ -276,8 +276,8 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     onToggleFilters: (open) => ((predFiltersOpen = open), render()),
     onResetFilters: () => ((filter = 'all'), (kind = 'all'), resetPredictLists(), render()),
     onSelect: (id) => onSelect(id),
-    onShowOnPage: (id) => void command(() => focusElement(id, true)),
-    onClearHighlight: () => void command(() => focusElement(null, false)),
+    onShowOnPage: (id) => void command((tid) => focusElement(tid, id, true)),
+    onClearHighlight: () => void command((tid) => focusElement(tid, null, false)),
     onToggleSection: toggleSection,
   };
 
@@ -299,8 +299,8 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     onLayers: (l) => onLayers(l),
     onPage: (position) => onPage(position),
     onSelect: (id) => onRecordedSelect(id),
-    onFocus: (id) => void command(() => focusRecorded(id)),
-    onClearFocus: () => void command(() => focusRecorded(null)),
+    onFocus: (id) => void command((tid) => focusRecorded(tid, id)),
+    onClearFocus: () => void command((tid) => focusRecorded(tid, null)),
     onToggleSection: toggleSection,
     onToggleFilters: (open) => ((recFiltersOpen = open), render()),
     onResetFilters: () => onLayers({ heatmap: true, clicks: true, scroll: true }),
@@ -341,30 +341,45 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   // Actions
   // -------------------------------------------------------------------------
 
-  async function command(action: () => Promise<void>): Promise<void> {
+  /** A command's tab stopped being the active tab: its response belongs to another page. */
+  const TAB_CHANGED = Symbol('tab-changed');
+
+  /** Request pinned to the command's tab; drops the response if the user switched tabs meanwhile. */
+  async function req<T extends RequestType>(id: number, type: T, payload: RequestMap[T]['payload']): Promise<Response<RequestMap[T]['data']>> {
+    const res = await api.request(id, type, payload);
+    if (tabId() !== id) throw TAB_CHANGED;
+    return res;
+  }
+
+  async function command(action: (id: number) => Promise<void>): Promise<void> {
+    const id = tabId();
+    if (id === null) return;
     busy = true;
     render();
     try {
-      await action();
+      await action(id);
+    } catch (e) {
+      if (e !== TAB_CHANGED) throw e;
     } finally {
       busy = false;
       render();
     }
   }
 
-  async function injected(): Promise<boolean> {
-    if (!tab?.id) return false;
+  async function injected(id: number): Promise<boolean> {
+    if (!tab || tab.id !== id) return false;
     const res = await api.ensureRuntime(tab);
+    if (tabId() !== id) throw TAB_CHANGED;
     if (!res.ok) error = res.error;
     return res.ok;
   }
 
   function onPredict(): void {
-    void command(async () => {
+    void command(async (id) => {
       error = null;
-      if (!(await injected())) return;
+      if (!(await injected(id))) return;
       intent = 'predict';
-      const res = await api.request(tab!.id!, 'RUN_PREDICTION', { source: 'sidepanel' });
+      const res = await req(id, 'RUN_PREDICTION', { source: 'sidepanel' });
       if (!res.ok) {
         error = makeError(res.error.code, res.error.message);
         intent = null;
@@ -373,24 +388,24 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       await loadSummary();
       apply(res.data);
       // Predict → see it on the page without another click.
-      const view = await api.request(tab!.id!, 'SET_INTERACTION_VIEW', { view: 'predicted' });
+      const view = await req(id, 'SET_INTERACTION_VIEW', { view: 'predicted' });
       if (view.ok) apply(view.data);
     });
   }
 
   function onClearPrediction(): void {
-    void command(async () => {
-      const res = await api.request(tab!.id!, 'CLEAR_PREDICTION', null);
+    void command(async (id) => {
+      const res = await req(id, 'CLEAR_PREDICTION', null);
       if (res.ok) apply(res.data);
       else error = res.error;
     });
   }
 
   function onRecord(): void {
-    void command(async () => {
+    void command(async (id) => {
       error = null;
-      if (!(await injected())) return;
-      const res = await api.request(tab!.id!, 'START_SESSION', { source: 'sidepanel' });
+      if (!(await injected(id))) return;
+      const res = await req(id, 'START_SESSION', { source: 'sidepanel' });
       if (res.ok) apply(res.data);
       else error = res.error;
     });
@@ -398,8 +413,8 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
 
   function onStop(): void {
     intent = 'stop';
-    void command(async () => {
-      const res = await api.request(tab!.id!, 'STOP_SESSION', null);
+    void command(async (id) => {
+      const res = await req(id, 'STOP_SESSION', null);
       if (res.ok) apply(res.data);
       else {
         error = res.error;
@@ -409,23 +424,23 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   }
 
   function onClearSession(): void {
-    void command(async () => {
-      const res = await api.request(tab!.id!, 'CLEAR_SESSION', null);
+    void command(async (id) => {
+      const res = await req(id, 'CLEAR_SESSION', null);
       if (res.ok) apply(res.data);
       else error = res.error;
     });
   }
 
   async function setView(view: 'none' | 'predicted' | 'recorded'): Promise<void> {
-    await command(async () => {
-      const res = await api.request(tab!.id!, 'SET_INTERACTION_VIEW', { view });
+    await command(async (id) => {
+      const res = await req(id, 'SET_INTERACTION_VIEW', { view });
       if (res.ok) apply(res.data);
       else error = res.error;
     });
   }
 
-  async function focusElement(id: number | null, scroll: boolean): Promise<void> {
-    const res = await api.request(tab!.id!, 'FOCUS_ELEMENT', { elementId: id, scroll });
+  async function focusElement(tid: number, id: number | null, scroll: boolean): Promise<void> {
+    const res = await req(tid, 'FOCUS_ELEMENT', { elementId: id, scroll });
     if (!res.ok) {
       error = res.error;
       return;
@@ -444,21 +459,21 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       selectedId = null;
       details = null;
       focusNote = null;
-      void command(() => focusElement(null, false));
+      void command((tid) => focusElement(tid, null, false));
       return;
     }
     selectedId = id;
     details = null;
     focusNote = null;
-    void command(async () => {
-      const [d] = await Promise.all([api.request(tab!.id!, 'GET_PREDICTION_DETAILS', { elementId: id }), focusElement(id, true)]);
-      if (d.ok && selectedId === id) details = d.data;
+    void command(async (tid) => {
+      const [d] = await Promise.all([req(tid, 'GET_PREDICTION_DETAILS', { elementId: id }), focusElement(tid, id, true)]);
+      if (d.ok && selectedId === id && d.data?.predictionId === result?.predictionId) details = d.data;
     });
   }
 
   function onLayers(l: RecordedLayers): void {
-    void command(async () => {
-      const res = await api.request(tab!.id!, 'SET_RECORDED_LAYERS', l);
+    void command(async (id) => {
+      const res = await req(id, 'SET_RECORDED_LAYERS', l);
       if (res.ok) apply(res.data);
       else error = res.error;
     });
@@ -467,15 +482,15 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   function onPage(position: number): void {
     recSelected = null;
     recNote = null;
-    void command(async () => {
-      const res = await api.request(tab!.id!, 'SET_RECORDED_PAGE', { page: position });
+    void command(async (id) => {
+      const res = await req(id, 'SET_RECORDED_PAGE', { page: position });
       if (res.ok) apply(res.data);
       else error = res.error;
     });
   }
 
-  async function focusRecorded(id: number | null): Promise<void> {
-    const res = await api.request(tab!.id!, 'FOCUS_RECORDED_ELEMENT', { page: snap?.recorded?.page ?? 0, elementId: id, scroll: id !== null });
+  async function focusRecorded(tid: number, id: number | null): Promise<void> {
+    const res = await req(tid, 'FOCUS_RECORDED_ELEMENT', { page: snap?.recorded?.page ?? 0, elementId: id, scroll: id !== null });
     if (!res.ok) {
       error = res.error;
       return;
@@ -488,11 +503,11 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     recNote = null;
     if (recSelected === id) {
       recSelected = null;
-      void command(() => focusRecorded(null));
+      void command((tid) => focusRecorded(tid, null));
       return;
     }
     recSelected = id;
-    void command(() => focusRecorded(id));
+    void command((tid) => focusRecorded(tid, id));
   }
 
   // -------------------------------------------------------------------------
@@ -515,7 +530,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       focusNote = null;
     } else if (selectedId !== null) {
       const d = await api.request(id, 'GET_PREDICTION_DETAILS', { elementId: selectedId });
-      details = d.ok ? d.data : null;
+      details = d.ok && d.data?.predictionId === next?.predictionId ? d.data : null;
     }
   }
 
@@ -544,6 +559,11 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   }
 
   function apply(next: TabSnapshot): void {
+    // Staleness is monotonic for one prediction. A slower focus/view command may carry an older
+    // ready snapshot, but only a new prediction id can make structural evidence current again.
+    if (snap?.prediction.state === 'stale' && next.prediction.state === 'ready' && next.prediction.predictionId === snap.prediction.predictionId) {
+      next = { ...next, prediction: snap.prediction };
+    }
     snap = next;
     // A session that starts (from any tab) opens the Overview Record card once per session; ticks,
     // page navigations and re-renders never touch it again, so only the user can collapse it.

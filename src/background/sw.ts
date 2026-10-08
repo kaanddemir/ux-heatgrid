@@ -1,6 +1,7 @@
 /**
  * Minimal service worker. Owns ONLY tab-lifecycle bookkeeping:
- *  - mirrors each tab's session state into storage.session (fallback for the UI)
+ *  - mirrors each tab's session state into storage.session, so it can tell the panel a session
+ *    ended when navigation destroys the content runtime (the runtime itself cannot)
  *  - marks sessions ended when navigation destroys the content runtime
  *  - recording continuity across full navigations: stores finalized page segments (received
  *    only at page boundaries) and resumes the recording in the next document

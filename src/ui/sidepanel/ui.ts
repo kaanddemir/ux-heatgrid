@@ -297,9 +297,12 @@ export function popoverGroup(label: string, ...children: Kids): HTMLElement {
 
 let filterPopoverCleanup: (() => void) | null = null;
 let openPopoverLabel: string | null = null;
+/** Bumped on every popover render/dismiss: a superseded render's deferred wiring must not attach. */
+let popoverGeneration = 0;
 
 /** Navigation cleanup: an open popover must not leave document listeners behind off-screen. */
 export function dismissPopover(): void {
+  popoverGeneration++;
   filterPopoverCleanup?.();
   filterPopoverCleanup = null;
   openPopoverLabel = null;
@@ -312,6 +315,7 @@ export function dismissPopover(): void {
 export function filterPopover(label: string, active: number, open: boolean, onOpen: ((open: boolean) => void) | undefined, onReset: (() => void) | undefined, ...groups: Array<HTMLElement | null>): HTMLElement | null {
   const shown = groups.filter((x): x is HTMLElement => !!x);
   if (!shown.length) return null;
+  const generation = ++popoverGeneration;
   filterPopoverCleanup?.();
   filterPopoverCleanup = null;
   const root = el('div', { class: open ? 'filter is-open' : 'filter' });
@@ -344,6 +348,7 @@ export function filterPopover(label: string, active: number, open: boolean, onOp
     onOpen?.(false);
   };
   queueMicrotask(() => {
+    if (generation !== popoverGeneration) return; // re-rendered or dismissed before this ran
     fitPopover(root.querySelector<HTMLElement>('.popover'));
     const outside = (e: PointerEvent) => {
       if (!root.contains(e.target as Node)) onOpen?.(false);

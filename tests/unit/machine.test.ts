@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canTransition, transition } from '../../src/content/machine';
+import { transition } from '../../src/content/machine';
 import { SESSION_STATES } from '../../src/shared/model';
 
 describe('session state machine', () => {
@@ -32,8 +32,8 @@ describe('session state machine', () => {
   });
 
   it('Clear is rejected during transient states', () => {
-    expect(canTransition('preparing', 'CLEAR')).toBe(false);
-    expect(canTransition('processing', 'CLEAR')).toBe(false);
+    expect(transition('preparing', 'CLEAR').ok).toBe(false);
+    expect(transition('processing', 'CLEAR').ok).toBe(false);
   });
 
   it('Stop from idle is INVALID_STATE', () => {
@@ -52,7 +52,7 @@ describe('session state machine', () => {
     expect(step('preparing', 'FAIL')).toBe('error');
     expect(step('processing', 'FAIL')).toBe('error');
     for (const s of SESSION_STATES.filter((x) => x !== 'preparing' && x !== 'processing')) {
-      expect(canTransition(s, 'FAIL')).toBe(false);
+      expect(transition(s, 'FAIL').ok).toBe(false);
     }
   });
 });

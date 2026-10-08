@@ -18,11 +18,9 @@ import {
   type InteractionView,
   type PredictionCounts,
   type SessionSummary,
-  type StaleReason,
   type TabSnapshot,
 } from './model';
 import type { PredictionElementDetails, PredictionSummaryResult } from '../content/prediction/types';
-import type { SessionCaptureDetails } from '../content/recorder/types';
 import type { ResumePayload } from '../content/recorder/segment';
 import type { RecordedFocusResult, RecordedLayers, RecordedPageView, RecordedSessionView } from '../content/recorded/types';
 
@@ -39,6 +37,8 @@ import type { RecordedFocusResult, RecordedLayers, RecordedPageView, RecordedSes
  * FOCUS_RECORDED_ELEMENT and TabSnapshot.recorded. Density and tiles never cross the protocol.
  * Phases 7–8 added Coach messages (GET_COACH / RUN_COACH / FOCUS_COACH_SUBJECT / GET_PAGE_COVERAGE);
  * they were removed with the Coach UI (V2 ships Predict + Record only) and are now rejected as unknown.
+ * V2.0.0 cleanup: GET_SESSION_CAPTURE_SUMMARY and PREDICTION_STALE had no consumer and were removed
+ * (stale transitions reach the panel through STATE_CHANGED).
  */
 export const PROTOCOL_VERSION = 3;
 
@@ -68,8 +68,6 @@ export interface RequestMap {
   FOCUS_ELEMENT: { kind: 'cmd'; payload: { elementId: number | null; scroll: boolean }; data: FocusResult };
   /** Service worker → new document: continue the tab's recording as the next page segment. */
   RESUME_RECORDING: { kind: 'cmd'; payload: ResumePayload; data: TabSnapshot };
-  /** Aggregated facts of the finished capture (no samples / event lists), or null. */
-  GET_SESSION_CAPTURE_SUMMARY: { kind: 'query'; payload: null; data: SessionCaptureDetails | null };
   /** Recorded Interaction: session summary + page list (no density), or null. */
   GET_RECORDED_SESSION: { kind: 'query'; payload: null; data: RecordedSessionView | null };
   /** Facts and lists of one recorded page (position in the recording), or null. */
@@ -88,7 +86,6 @@ export interface EventMap {
   SESSION_TICK: { sessionId: string; summary: SessionSummary };
   SESSION_ENDED: { tabId?: number; reason: EndedReason };
   PREDICTION_READY: { predictionId: string; summary: PredictionCounts };
-  PREDICTION_STALE: { predictionId: string | null; reason: StaleReason };
 }
 export type EventType = keyof EventMap;
 
@@ -121,7 +118,6 @@ const REQUEST_KINDS: { [K in RequestType]: RequestMap[K]['kind'] } = {
   GET_PREDICTION_DETAILS: 'query',
   SET_INTERACTION_VIEW: 'cmd',
   FOCUS_ELEMENT: 'cmd',
-  GET_SESSION_CAPTURE_SUMMARY: 'query',
   RESUME_RECORDING: 'cmd',
   GET_RECORDED_SESSION: 'query',
   GET_RECORDED_PAGE: 'query',
@@ -129,8 +125,7 @@ const REQUEST_KINDS: { [K in RequestType]: RequestMap[K]['kind'] } = {
   SET_RECORDED_LAYERS: 'cmd',
   FOCUS_RECORDED_ELEMENT: 'cmd',
 };
-const EVENT_TYPES: readonly EventType[] = ['STATE_CHANGED', 'SESSION_TICK', 'SESSION_ENDED', 'PREDICTION_READY', 'PREDICTION_STALE'];
-const STALE_REASONS: readonly StaleReason[] = ['dom-change', 'resize', 'same-document-navigation'];
+const EVENT_TYPES: readonly EventType[] = ['STATE_CHANGED', 'SESSION_TICK', 'SESSION_ENDED', 'PREDICTION_READY'];
 
 let requestCounter = 0;
 
@@ -220,7 +215,6 @@ function isValidRequestPayload(type: RequestType, payload: unknown): boolean {
     case 'GET_STATE':
     case 'CLEAR_PREDICTION':
     case 'GET_PREDICTION':
-    case 'GET_SESSION_CAPTURE_SUMMARY':
     case 'GET_RECORDED_SESSION':
       return payload === null;
   }
@@ -239,10 +233,6 @@ export function validateRequest(x: unknown): HeatGridError | null {
     return makeError('INVALID_MESSAGE', `Invalid payload for ${x.type}`);
   }
   return null;
-}
-
-export function isRequest(x: unknown): x is RequestEnvelope {
-  return validateRequest(x) === null;
 }
 
 /** True for anything that claims to be a V2 envelope (used to ignore foreign messages). */
@@ -286,8 +276,6 @@ export function isEvent(x: unknown): x is EventEnvelope {
       return p.reason === 'navigation' || p.reason === 'runtime-lost';
     case 'PREDICTION_READY':
       return typeof p.predictionId === 'string' && isObject(p.summary);
-    case 'PREDICTION_STALE':
-      return (p.predictionId === null || typeof p.predictionId === 'string') && (STALE_REASONS as readonly string[]).includes(p.reason as string);
   }
 }
 

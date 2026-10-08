@@ -101,7 +101,6 @@ export class PredictionController {
     this.apply('STALE');
     this.staleReason = reason;
     this.watcher?.disarm();
-    this.deps.emit(makeEvent('PREDICTION_STALE', { predictionId: this.result?.predictionId ?? null, reason }));
     this.deps.onStateChange();
   }
 

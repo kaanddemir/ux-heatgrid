@@ -76,11 +76,12 @@ describe('copy', () => {
   it('every reason and caveat has plain copy without probability language', () => {
     const reasons: ReasonCode[] = [
       'FIRST_VIEWPORT', 'LARGE_RELATIVE_SIZE', 'STRONG_CONTRAST', 'FILLED_STYLE', 'VISUALLY_ISOLATED', 'FEW_COMPETING_CONTROLS',
-      'STRONGEST_IN_GROUP', 'UNIQUE_STYLE', 'NEAR_HEADING', 'FIXED_POSITION', 'BELOW_FOLD', 'FAR_DOWN_PAGE', 'SMALL_RELATIVE_SIZE',
+      'STRONGEST_IN_GROUP', 'UNIQUE_STYLE', 'NEAR_HEADING', 'FIXED_POSITION', 'LOW_ON_FIRST_SCREEN', 'BELOW_FOLD', 'FAR_DOWN_PAGE', 'SMALL_RELATIVE_SIZE',
       'LOW_CONTRAST', 'MANY_COMPETING_CONTROLS', 'CROWDED_REGION', 'WEAKER_THAN_PEERS', 'NAV_CLUSTER', 'FOOTER_CONTEXT', 'TINY_TARGET',
       'PARTLY_CLIPPED', 'REDUCED_OPACITY', 'HEURISTIC_CONTROL', 'DISABLED', 'NOT_RENDERED', 'NEAR_INVISIBLE', 'UNUSABLE_GEOMETRY',
     ];
     const texts = [...reasons.map((r) => reasonText(r)), ...Object.values(CAVEAT_COPY)];
+    expect(new Set(reasons).size).toBe(28);
     for (const t of texts) {
       expect(t.length).toBeGreaterThan(3);
       expect(t).not.toMatch(/probab|attention|gaze|%|\bAI\b|heat|\bshould\b|\bconsider\b|\btry\b/i);
@@ -95,5 +96,16 @@ describe('copy', () => {
     const d = toElementDetails(result, el(result, 'n-20').elementRef.id)!;
     expect(reasonText('MANY_COMPETING_CONTROLS', d.facts)).toMatch(/^Competes with \d+ nearby controls$/);
     expect(reasonText('MANY_COMPETING_CONTROLS')).toBe('Many controls nearby');
+  });
+
+  it('phrases relative and contextual evidence no more strongly than it was measured', () => {
+    expect(reasonText('LARGE_RELATIVE_SIZE')).toBe('Relatively large control');
+    expect(reasonText('SMALL_RELATIVE_SIZE')).toBe('Relatively small control');
+    expect(reasonText('STRONG_CONTRAST')).toBe('Clear text contrast');
+    expect(reasonText('UNIQUE_STYLE')).toBe('Uses a less common control style');
+    expect(reasonText('NEAR_HEADING')).toBe('Below a nearby heading');
+    expect(reasonText('NAV_CLUSTER')).toBe('Part of a dense navigation group');
+    expect(reasonText('LOW_ON_FIRST_SCREEN')).toBe('Low on the first screen');
+    expect(reasonText('UNUSABLE_GEOMETRY')).toBe('Geometry is too small to assess');
   });
 });

@@ -1,10 +1,9 @@
 /**
  * Extension-page client for the content runtime: tab resolution, injection, typed requests,
- * event subscription and mirror fallback for the side panel; owns no state.
+ * and event subscription for the side panel; owns no state.
  */
 import { BUILD_ID, CONTENT_RUNTIME_FILE, isRestrictedUrl } from '../../shared/constants';
-import { mirrorKey } from '../../shared/mirror';
-import { makeError, type HeatGridError, type LifecycleMirror } from '../../shared/model';
+import { makeError, type HeatGridError } from '../../shared/model';
 import {
   isEvent,
   isResponse,
@@ -95,16 +94,6 @@ export function onEvent(handler: (event: EventEnvelope, tabId: number | null) =>
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);
-}
-
-export async function readMirror(tabId: number): Promise<LifecycleMirror | null> {
-  try {
-    const key = mirrorKey(tabId);
-    const stored = await chrome.storage.session.get(key);
-    return (stored[key] as LifecycleMirror | undefined) ?? null;
-  } catch {
-    return null;
-  }
 }
 
 function errMessage(e: unknown): string {

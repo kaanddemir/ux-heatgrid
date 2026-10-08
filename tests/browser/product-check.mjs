@@ -108,6 +108,7 @@ try {
     await sleep(250); // let the collapse command's re-render finish before the next pointer sequence
     await panel.click('button[data-key="filter-toggle"]');
     await until(() => panel.eval(`!!document.querySelector('.popover')`));
+    await sleep(250); // past the popover's 180 ms enter fade
     await shot(`predicted-filter-320-${scheme}`);
     await panel.click('button[data-key="filter-done"]');
   }

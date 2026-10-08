@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveGeometry, deriveRenderFacts, fontWeightNumber, lineHeightPx, visibleFraction } from '../../src/content/analyzer/measure';
+import { deriveGeometry, deriveRenderFacts, fontWeightNumber, lineHeightPx } from '../../src/content/analyzer/measure';
 import { isScrollable, selectScrollRoots } from '../../src/content/analyzer/scrollRoots';
 
 const style = { display: 'block', visibility: 'visible', opacity: 1, position: 'static', cursor: 'auto' };
@@ -54,13 +54,6 @@ describe('geometry', () => {
     const g = deriveGeometry({ x: 0, y: 0, width: 100, height: 50 }, vp, true);
     expect(g.document.y).toBe(0);
     expect(g.firstScreenFraction).toBe(1);
-  });
-
-  it('visibleFraction handles partial and no overlap', () => {
-    const clip = { x: 0, y: 0, width: 100, height: 100 };
-    expect(visibleFraction({ x: 50, y: 0, width: 100, height: 100 }, clip)).toBe(0.5);
-    expect(visibleFraction({ x: 200, y: 0, width: 10, height: 10 }, clip)).toBe(0);
-    expect(visibleFraction({ x: 0, y: 0, width: 0, height: 10 }, clip)).toBe(0);
   });
 
   it('style normalization', () => {

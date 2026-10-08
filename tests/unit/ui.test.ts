@@ -11,9 +11,9 @@ import type { RecordedPageView, RecordedSessionView } from '../../src/content/re
 import type { TabSnapshot } from '../../src/shared/model';
 import { makeEvent, makeRequest, type RequestEnvelope, type Response } from '../../src/shared/protocol';
 import { createPanelApp, type PanelApi } from '../../src/ui/sidepanel/app';
-import { INITIAL_NAV, SECTIONS, formatDuration, overviewModel, route } from '../../src/ui/sidepanel/model';
+import { INITIAL_NAV, SECTIONS, formatDuration, route } from '../../src/ui/sidepanel/model';
 import { recordedBody, recordedFilters, recordedHeadAction, recordedWarnings } from '../../src/ui/sidepanel/recordedView';
-import { button, noticePanel } from '../../src/ui/sidepanel/ui';
+import { button, dismissPopover, filterPopover, noticePanel } from '../../src/ui/sidepanel/ui';
 import { cleanSubject } from '../../src/ui/shared/regionLabel';
 import { fixtureReader, mount } from '../helpers/fixtureReader';
 
@@ -29,7 +29,6 @@ const snapshot = (o: { prediction?: Partial<TabSnapshot['prediction']>; session?
   overlay: { showLow: false, focusedElementId: null },
   recorded: o.recorded ?? null,
 });
-const capture = (o: Record<string, unknown>) => ({ kind: 'capture' as const, elapsedMs: 102_000, activeMs: 79_000, pointerSamples: 10, clicks: 8, activations: 0, pages: 1, deepestScroll: 0.72, controlsReached: 14, controlsInteracted: 6, regionsInteracted: 2, limitations: [], ...o });
 
 describe('Panel navigation model', () => {
   it('three top-level destinations; Predict routes to Predict when ready; Stop routes to Record only after processing', () => {
@@ -44,15 +43,10 @@ describe('Panel navigation model', () => {
     expect(route(INITIAL_NAV, 'stop', snapshot({ session: { state: 'error' } }))).toEqual({ nav: INITIAL_NAV, intent: null });
   });
 
-  it('Overview summaries are compact facts (single vs multi-page), never scores', () => {
-    const one = overviewModel(snapshot({ session: { state: 'ready', result: capture({}) }, prediction: { state: 'ready', summary: { assessed: 22, notAssessed: 0, high: 3, medium: 11, low: 8 } } }));
-    expect(one).toEqual({ predicted: { line: '3 High · 11 Medium · 8 Low', stale: false }, recorded: { line: '1m 42s · 8 clicks · 72% scroll' }, recording: null });
-    const multi = overviewModel(snapshot({ session: { state: 'ready', result: capture({ elapsedMs: 138_000, pages: 3, clicks: 14, deepestScroll: null }) } }));
-    expect(multi.recorded!.line).toBe('2m 18s · 3 pages · 14 clicks');
-    expect(overviewModel(snapshot({ session: { state: 'recording', recording: { segmentCount: 2, currentSegmentIndex: 1, continuity: 'continuous' } } })).recording).toEqual({ state: 'recording', pages: 2 });
+  it('formatDuration is compact', () => {
     expect([formatDuration(42_000), formatDuration(102_000), formatDuration(3_780_000)]).toEqual(['42s', '1m 42s', '1h 03m']);
-    expect(JSON.stringify([one, multi])).not.toMatch(/score|grade|engagement/i);
   });
+
 });
 
 describe('Unified warning notice', () => {
@@ -77,6 +71,24 @@ describe('Unified warning notice', () => {
     notice = renderNotice();
     expect(notice.querySelectorAll('.notice-list li')).toHaveLength(1);
     expect(notice.textContent).not.toContain('Duplicate layout copy');
+  });
+
+  it('an open filter popover re-rendered twice in one tick keeps exactly one set of document listeners', async () => {
+    const closes: boolean[] = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const render = () => host.replaceChildren(filterPopover('Filter', 0, true, (open) => closes.push(open), undefined, document.createElement('div'))!);
+    render();
+    render(); // e.g. apply() then the command's finally render, before microtasks run
+    await Promise.resolve();
+    host.querySelector('.popover > div')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(closes).toEqual([]); // a pointer inside the live popover never closes it
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(closes).toEqual([false]); // outside closes it, once
+    dismissPopover();
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    expect(closes).toEqual([false]);
+    host.remove();
   });
 
   it('renders one issue without a count or disclosure control', () => {
@@ -183,6 +195,46 @@ describe('Panel app', () => {
     await older;
     expect(app.inspect().tabId).toBe(2);
     expect(root.querySelector('.page-host')!.textContent).toBe('new.example');
+  });
+
+  it('a command response that arrives after switching tabs never lands on the new tab', async () => {
+    let current = 1;
+    const sent: Array<[number, string]> = [];
+    let releaseStart!: () => void;
+    let releaseInject!: () => void;
+    const recording = snapshot({ session: { state: 'recording', sessionId: 's1', summary: { startedAt: 0, endedAt: null, elapsedMs: 1000, activeMs: 1000, clicks: 0, scrollDepth: 0 } as never } });
+    const api: PanelApi = {
+      activeTab: async () => ({ id: current, windowId: 1, url: `https://tab${current}.example/` }) as chrome.tabs.Tab,
+      ensureRuntime: () => new Promise((resolve) => (releaseInject = () => resolve({ ok: true, data: { injected: true } }))),
+      request: (tabId, type) => {
+        sent.push([tabId, type]);
+        if (type === 'START_SESSION') return new Promise((resolve) => (releaseStart = () => resolve({ ok: true, data: recording } as never)));
+        return Promise.resolve({ ok: true, data: type === 'GET_STATE' ? snapshot() : null } as never);
+      },
+    };
+    const root = document.createElement('div');
+    const app = createPanelApp(root, api);
+    const flush = async () => { for (let i = 0; i < 4; i++) await new Promise((r) => setTimeout(r, 0)); };
+    await app.refresh();
+    // Record on tab 1; the user switches to tab 2 before START_SESSION answers.
+    root.querySelector<HTMLButtonElement>('[data-key="ov-start-record"]')!.click();
+    releaseInject();
+    await flush();
+    current = 2;
+    await app.refresh();
+    releaseStart();
+    await flush();
+    expect(app.inspect().tabId).toBe(2);
+    expect(root.querySelector('.live, .live-pill')).toBeNull(); // tab 1's recording is not shown on tab 2
+    // Predict on tab 2; the user switches back to tab 1 while the runtime is being injected.
+    root.querySelector<HTMLButtonElement>('[data-key="ov-start-predict"]')!.click();
+    await flush();
+    current = 1;
+    await app.refresh();
+    releaseInject();
+    await flush();
+    expect(sent.filter(([, type]) => type === 'RUN_PREDICTION')).toEqual([]); // never sent to a tab the user did not ask for
+    expect(root.querySelector('[data-key="ov-start-record"]')!.hasAttribute('disabled')).toBe(false); // not left busy
   });
 
   it('opens on Overview: page identity + Predict + Record panels, collapsed; no Coach, no developer UI', async () => {
@@ -407,6 +459,9 @@ describe('Panel app', () => {
     expect(root.querySelectorAll('.screen .notice')).toHaveLength(1);
     expect(root.querySelector('[data-key="predict-rerun"]')).toBeNull();
     expect(sent).not.toContain('RUN_PREDICTION');
+    root.querySelector<HTMLButtonElement>('.row-toggle')!.click();
+    await settle();
+    expect(root.querySelector('.detail')!.textContent).toContain('Page changed — these reasons describe the earlier analysis');
   });
 
   it('Predict filters: Band and Type narrow the list, count active, Reset clears; never run', async () => {
@@ -472,7 +527,6 @@ describe('Panel app', () => {
     await settle();
     expect(root.querySelector('.row.is-open .icon-btn')!.getAttribute('aria-pressed')).toBe('true');
     const d = root.querySelector('.detail')!;
-    expect(d.querySelector('.stat-grid')!.classList.contains('structure-grid')).toBe(true);
     expect([...d.querySelectorAll('.stat dt')].map((e) => e.textContent).slice(0, 2)).toEqual(['Band', 'Type']);
     expect([...d.querySelectorAll('.detail-label')].map((e) => e.textContent).filter((t) => t !== 'Caveats')).toEqual(['Why']);
     expect(d.textContent).not.toMatch(/Factors|Prominence|Competition|Availability|Context|\d\.\d{2}/);
@@ -610,5 +664,17 @@ describe('side-panel stylesheet', () => {
       } else buf += ch;
     }
     expect(depth).toBe(0);
+    const detailRule = css.match(/(?:^|\n)\.detail\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(detailRule).not.toMatch(/(?:^|;)\s*(?:background|border|border-radius)\s*:/); // expanded rows stay integrated with the list surface
+    const rootTokens = css.match(/:root\s*\{([^}]*)\}/)?.[1] ?? '';
+    const token = (name: string): string => rootTokens.match(new RegExp(String.raw`--${name}:\s*(#[0-9a-f]{6})`, 'i'))?.[1] ?? '';
+    const luminance = (hex: string): number => {
+      const rgb = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16) / 255).map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+      return 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
+    };
+    const contrastWithWhite = (hex: string): number => 1.05 / (luminance(hex) + 0.05);
+    for (const name of ['pred-action', 'pred-action-hover', 'pred-action-pressed', 'heat-action', 'heat-action-hover', 'heat-action-pressed', 'neutral-action', 'neutral-action-hover', 'neutral-action-pressed']) {
+      expect(contrastWithWhite(token(name)), name).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

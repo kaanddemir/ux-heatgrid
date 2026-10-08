@@ -74,7 +74,7 @@ describe('PredictionController', () => {
     expect(b.elements.map((e) => [e.elementRef.id, e.band, e.score])).toEqual(a.elements.map((e) => [e.elementRef.id, e.band, e.score]));
   });
 
-  it('stale: ready → stale with reason and event; never recomputes', () => {
+  it('stale: ready → stale with reason and one state change; never recomputes', () => {
     const { c, events, states, watcher } = setupController();
     c.run();
     const id = c.getResult()!.predictionId;
@@ -83,11 +83,11 @@ describe('PredictionController', () => {
       ctrl.markStale('dom-change');
     }
     expect(c.snapshot()).toMatchObject({ state: 'stale', staleReason: 'dom-change', predictionId: id });
-    expect(events.at(-1)).toMatchObject({ type: 'PREDICTION_STALE', payload: { predictionId: id, reason: 'dom-change' } });
     expect(states.at(-1)).toBe('stale');
     expect(watcher.disarm).toHaveBeenCalled();
     c.markStale('resize'); // already stale: no-op
-    expect(events.filter((e) => e.type === 'PREDICTION_STALE')).toHaveLength(1);
+    expect(states.filter((x) => x === 'stale')).toHaveLength(1);
+    expect(events.map((e) => e.type)).toEqual(['PREDICTION_READY']); // stale reaches the panel via STATE_CHANGED
     expect(c.getResult()!.predictionId).toBe(id); // result kept, not recomputed
   });
 

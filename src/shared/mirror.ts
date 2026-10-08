@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the service worker's storage.session lifecycle mirror.
- * The mirror is a fallback only; the content runtime is authoritative while alive.
+ * The mirror only drives SESSION_ENDED; the content runtime is authoritative while alive.
  */
 import { ACTIVE_STATES, type EndedReason, type LifecycleMirror, type TabSnapshot } from './model';
 import { MIRROR_KEY_PREFIX } from './constants';

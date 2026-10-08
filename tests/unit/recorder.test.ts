@@ -4,7 +4,7 @@ import { createPageAnalyzer } from '../../src/content/analyzer';
 import { PointerBuffer } from '../../src/content/recorder/buffer';
 import { CLICK_CAP } from '../../src/content/recorder/clicks';
 import { ActivityClock, IDLE_MS } from '../../src/content/recorder/idle';
-import { captureDetails, liveRecorderListeners, startRecorder, summarizeCapture, type Recorder } from '../../src/content/recorder';
+import { liveRecorderListeners, startRecorder, summarizeCapture, type Recorder } from '../../src/content/recorder';
 import { DWELL_CAP_MS } from '../../src/content/recorder/pointer';
 import { MAX_ROOTS, qualifiesAsRoot, toRootCoords } from '../../src/content/recorder/roots';
 import { TIMELINE_CAP } from '../../src/content/recorder/scroll';
@@ -491,15 +491,13 @@ describe('capture result, stats, privacy', () => {
     expect(JSON.stringify(s)).not.toMatch(/score|engagement|attention|frustration|rage/i);
   });
 
-  it('capture details expose aggregates only (no samples or event lists)', () => {
+  it('one pointer click is recorded once, as a pointer click on an interactive target', () => {
     const r = track(rig());
     r.move(r.$('a'), 150, 120, 0);
     r.click(r.$('a'));
-    const d = captureDetails(r.rec.stop());
-    const json = JSON.stringify(d);
-    expect(json).not.toMatch(/"weightMs"|"anchorX"|"timeline"|"clicks":\[/);
-    expect(d.clickCounts).toEqual({ pointer: 1, activation: 0, maybeNotClickable: 0, dropped: 0 });
-    expect(d.elements.every((e) => e.hasActiveInteraction || e.pointerMs > 0 || e.exposure.reached)).toBe(true);
+    const c = r.rec.stop();
+    expect(c.clicks.map((x) => [x.kind, x.interactive])).toEqual([['pointer', 'yes']]);
+    expect(c.clicksDropped).toBe(0);
   });
 
   it('never captures typed text or field values', () => {
@@ -588,16 +586,12 @@ describe('lifecycle and cleanup', () => {
     expect(state()).toMatchObject({ prediction: { state: 'ready', predictionId: pid }, session: { state: 'ready' } });
   });
 
-  it('Stop exposes a lightweight summary; GET_SESSION_CAPTURE_SUMMARY returns aggregates', () => {
+  it('Stop exposes a lightweight capture summary; Clear removes it', () => {
     const { call, state } = runtime();
-    expect(call('GET_SESSION_CAPTURE_SUMMARY', null)).toEqual({ ok: true, data: null });
     call('START_SESSION', { source: 'sidepanel' });
     call('STOP_SESSION', null);
-    const s = state().session;
-    expect(s.result).toMatchObject({ kind: 'capture', pointerSamples: 0 });
-    const d = call('GET_SESSION_CAPTURE_SUMMARY', null) as { ok: true; data: { summary: unknown } };
-    expect(d.data.summary).toEqual(s.result);
+    expect(state().session.result).toMatchObject({ kind: 'capture', pointerSamples: 0 });
     call('CLEAR_SESSION', null);
-    expect(call('GET_SESSION_CAPTURE_SUMMARY', null)).toEqual({ ok: true, data: null });
+    expect(state().session.result).toBeNull();
   });
 });

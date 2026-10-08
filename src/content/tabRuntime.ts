@@ -14,7 +14,7 @@ import { toElementDetails, toSummaryResult } from './prediction/summary';
 import type { PredictionSummaryResult } from './prediction/types';
 import { OverlayController } from './overlay/controller';
 import { createRecIndicator } from './overlay/rec';
-import { captureDetails, liveRecorderListeners, startRecorder, type Recorder } from './recorder';
+import { liveRecorderListeners, startRecorder, type Recorder } from './recorder';
 import { pageIdentity, type ContinuityChannel, type PageCaptureSegment, type RecordingSessionResult } from './recorder/segment';
 import { RecordedOverlay } from './overlay/recorded';
 import { recordedTitle } from './overlay/legend';
@@ -335,14 +335,16 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
     if (!recorded) return fail(makeError('INVALID_STATE', 'No recorded session'));
     const p = recorded.segments[page];
     if (!p) return fail(makeError('INVALID_MESSAGE', `No recorded page ${page}`));
-    recordedPage = page;
     if (elementId === null) {
+      recordedPage = page;
       recordedFocus = null;
       emitState();
       return ok({ status: 'cleared', snapshot: snapshot() });
     }
+    // Validate before mutating: a rejected request must not move the selection to another page.
     const known = p.elementStats.some((e) => e.elementRef === elementId) || p.lists.neverReached.items.some((e) => e.elementRef === elementId);
     if (!known) return fail(makeError('INVALID_MESSAGE', `Element ${elementId} is not in this recorded page`));
+    recordedPage = page;
     recordedFocus = elementId;
     // Another page (or an earlier document of this page): show its facts, never a guessed element.
     const status = !pageOpen(p) ? 'not-open' : !p.local ? 'unavailable' : null;
@@ -381,10 +383,6 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
           dropRecorded();
           hidePredictedForRecording();
           return respond(session.resume((msg as RequestEnvelope<'RESUME_RECORDING'>).payload));
-        case 'GET_SESSION_CAPTURE_SUMMARY': {
-          const capture = session.getCapture();
-          return ok(capture ? captureDetails(capture) : null);
-        }
         case 'STOP_SESSION':
           return respond(session.stop());
         case 'CLEAR_SESSION': {

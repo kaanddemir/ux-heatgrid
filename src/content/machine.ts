@@ -25,7 +25,3 @@ export function transition(state: SessionState, action: SessionAction): Transiti
   }
   return { ok: true, next };
 }
-
-export function canTransition(state: SessionState, action: SessionAction): boolean {
-  return TRANSITIONS[action][state] !== undefined;
-}

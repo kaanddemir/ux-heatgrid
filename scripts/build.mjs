@@ -43,7 +43,6 @@ async function copyStatic() {
     await mkdir(dirname(target), { recursive: true });
     await cp(join(src, from), target);
   }
-  // Icons are plain assets shared with the legacy build; no legacy code is pulled in.
   await cp(join(root, 'icons'), join(dist, 'icons'), { recursive: true });
   await writeFile(join(dist, 'BUILD_ID'), `${buildId}\n`);
 }

@@ -26,7 +26,6 @@ import type {
   RecordedElementStats,
   RecordedRegionStats,
   SessionCapture,
-  SessionCaptureDetails,
 } from './types';
 import { summarizeCapture } from './summary';
 
@@ -337,21 +336,3 @@ function regionStats(
 }
 
 
-export function captureDetails(c: SessionCapture): SessionCaptureDetails {
-  return {
-    summary: summarizeCapture(c),
-    pointer: { samples: c.pointer.count, capacity: c.pointer.capacity, totalWeightMs: Math.round(c.pointer.totalWeightMs), coarseCells: c.pointer.coarse?.cells.length ?? 0 },
-    clickCounts: {
-      pointer: c.clicks.filter((x) => x.kind === 'pointer').length,
-      activation: c.clicks.filter((x) => x.kind === 'activation').length,
-      maybeNotClickable: c.clicks.filter((x) => x.interactive === 'maybe-not').length,
-      dropped: c.clicksDropped,
-    },
-    elements: c.elements
-      .filter((e) => e.hasActiveInteraction || e.pointerMs > 0 || e.exposure.reached)
-      .map((e) => ({ ...e, pointerMs: Math.round(e.pointerMs), hoverDwellMs: Math.round(e.hoverDwellMs), exposure: { ...e.exposure, exposureMs: Math.round(e.exposure.exposureMs) } })),
-    regions: c.regions.map((r) => ({ ...r })),
-    scrollRoots: c.scroll.roots.map((r) => ({ ...r })),
-    timelinePoints: c.scroll.timeline.length,
-  };
-}

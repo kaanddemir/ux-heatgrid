@@ -8,8 +8,6 @@ UX HeatGrid is a local-first Chrome side-panel extension for inspecting page str
 - **Predict** — a deterministic, heuristic assessment of which interactive controls are structurally more prominent on the current page. Results are relative bands, not probabilities or observed user behavior.
 - **Record** — a local visualization of the clicks, activations, pointer presence, hover, focus, exposure and scrolling captured during your own recording session.
 
-The preserved Coach engine is inactive and is not wired into the production UI or protocol.
-
 ## Privacy and data handling
 
 HeatGrid performs analysis locally and has no analytics, advertising, tracking SDKs or application network service. It does not read form values or key values.
@@ -52,7 +50,7 @@ npm run dev
 4. Choose **Load unpacked**.
 5. Select the generated `dist/` directory, not the repository root.
 
-The root-level V1 popup files are retained as legacy source history and are not copied or bundled into the V2 production extension.
+The V1 popup implementation was removed in 2.0.0; it remains available in git history.
 
 ## Architecture
 
