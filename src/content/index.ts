@@ -5,7 +5,7 @@
  *  - same build already running → no-op (no duplicate listeners)
  *  - different build running     → dispose it, then boot this one
  */
-import { BUILD_ID, RECORDING_PORT, RUNTIME_GLOBAL_KEY } from '../shared/constants';
+import { BUILD_ID, OVERLAY_TAG, PANEL_PORT, RECORDING_PORT, REC_TAG, RUNTIME_GLOBAL_KEY } from '../shared/constants';
 import type { ContinuityChannel } from './recorder/segment';
 import { fail, isEnvelope, makeEvent, validateRequest, type EventEnvelope, type RequestEnvelope, type Response } from '../shared/protocol';
 import { createStaleWatcher } from './prediction/stale';
@@ -79,6 +79,9 @@ function post(msg: unknown): void {
 }
 
 function boot(): RuntimeHandle {
+  // Hosts left by a runtime this one replaces, or by one whose extension was reloaded (its isolated
+  // world can no longer be reached to dispose it). Nothing is drawn by this runtime yet.
+  document.querySelectorAll(`${OVERLAY_TAG}, ${REC_TAG}`).forEach((n) => n.remove());
   const tab = createTabRuntime({ buildId: BUILD_ID, emit, continuity, createWatcher: (onStale) => createStaleWatcher(onStale) });
 
   const onMessage = (
@@ -113,7 +116,18 @@ function boot(): RuntimeHandle {
     if (e.persisted) post({ type: 'resume-request' });
   };
 
+  // Side panels connected to this tab. When the last one closes, the page visualization goes too.
+  let panels = 0;
+  const onConnect = (port: chrome.runtime.Port): void => {
+    if (port.name !== PANEL_PORT) return;
+    panels++;
+    port.onDisconnect.addListener(() => {
+      if (--panels === 0 && !disposed) tab.panelClosed();
+    });
+  };
+
   chrome.runtime.onMessage.addListener(onMessage);
+  chrome.runtime.onConnect.addListener(onConnect);
   window.addEventListener('pagehide', onPageHide);
   window.addEventListener('pageshow', onPageShow);
 
@@ -124,6 +138,7 @@ function boot(): RuntimeHandle {
     tab.dispose();
     try {
       chrome.runtime.onMessage.removeListener(onMessage);
+      chrome.runtime.onConnect.removeListener(onConnect);
     } catch {
       // context invalidated
     }

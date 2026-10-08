@@ -1,7 +1,7 @@
 // Composes the four Chrome Web Store screenshots from the REAL captures in assets/store/captures/
 // (run capture.mjs first). Layout and copy only; the UI itself is never redrawn.
-// Renders at 2× (2560×1600) into final/2x/ and a downsampled 1280×800 store export into final/.
-// Usage: PLAYWRIGHT_DIR=… CHROME_PATH=… node assets/store/compose.mjs
+// Renders at 2× into <out>/2560x1600/ and a downsampled store upload into <out>/1280x800/.
+// Usage: PLAYWRIGHT_DIR=… CHROME_PATH=… node assets/store/compose.mjs [outDir]  (default: assets/store/final)
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -9,8 +9,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CAP = path.join(here, 'captures');
-const OUT = path.join(here, 'final');
-fs.mkdirSync(path.join(OUT, '2x'), { recursive: true });
+const OUT = path.resolve(process.argv[2] ?? path.join(here, 'final'));
+const BIG = path.join(OUT, '2560x1600'), STORE = path.join(OUT, '1280x800');
+for (const d of [BIG, STORE]) fs.mkdirSync(d, { recursive: true });
 const { chromium } = createRequire(import.meta.url)(path.join(process.env.PLAYWRIGHT_DIR ?? '', 'playwright'));
 const img = (name) => `data:image/png;base64,${fs.readFileSync(path.join(CAP, name)).toString('base64')}`;
 const mark = `data:image/png;base64,${fs.readFileSync(path.join(here, '../brand/icon-512.png')).toString('base64')}`;
@@ -55,12 +56,12 @@ function heatStrip(seed) {
   return `<svg viewBox="0 0 1280 800" style="position:absolute;inset:0;width:100%;height:100%;-webkit-mask-image:linear-gradient(180deg,transparent 82%,#000 92%)">${cells}</svg>`;
 }
 const bg = (seed, glows) => `<div class="bg">${glows.map(([c, x, y, s, o]) => `<div class="glow" style="left:${x}px;top:${y}px;width:${s}px;height:${s}px;background:${c};opacity:${o}"></div>`).join('')}<div class="dots"></div>${heatStrip(seed)}</div>`;
-const brand = `<div class="brand"><img src="${mark}" alt="">HeatGrid</div>`;
+const brand = `<div class="brand"><img src="${mark}" alt="">UX HeatGrid</div>`;
 const shot = (file, x, y, w, h, extra = '') => `<div class="shot" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;background-image:url(${img(file)});background-size:${w}px auto;${extra}"></div>`;
 const chip = (c, t) => `<span><i style="background:${c}"></i>${t}</span>`;
 
 const slides = [
-  ['heatgrid-store-1-overview.png', `
+  ['ux-heatgrid-store-1-overview.png', `
     ${bg(7, [[BLUE, -180, -240, 640, .42], [CORAL, 980, 520, 520, .22]])}
     <div style="position:absolute;left:64px;top:64px;width:440px">
       ${brand}
@@ -70,7 +71,7 @@ const slides = [
     </div>
     ${shot('overview-page.png', 548, 88, 560, 365)}
     ${shot('overview-panel.png', 896, 236, 320, 520)}`],
-  ['heatgrid-store-2-predict.png', `
+  ['ux-heatgrid-store-2-predict.png', `
     ${bg(13, [[BLUE, -160, -260, 680, .5], [BLUE, 900, 480, 520, .2]])}
     <div style="position:absolute;left:64px;top:64px;width:430px">
       ${brand}
@@ -80,7 +81,7 @@ const slides = [
     </div>
     ${shot('predict-page.png', 540, 88, 600, 391)}
     ${shot('predict-detail-panel.png', 880, 220, 336, 540)}`],
-  ['heatgrid-store-3-record.png', `
+  ['ux-heatgrid-store-3-record.png', `
     ${bg(29, [[CORAL, -200, -260, 660, .32], [CORAL, 940, 500, 520, .2]])}
     <div style="position:absolute;left:64px;top:64px;width:430px">
       ${brand}
@@ -90,7 +91,7 @@ const slides = [
     </div>
     ${shot('record-page.png', 540, 88, 600, 391)}
     ${shot('record-panel.png', 880, 220, 336, 540)}`],
-  ['heatgrid-store-4-inspector.png', `
+  ['ux-heatgrid-store-4-inspector.png', `
     ${bg(41, [[BLUE, -200, 300, 560, .3], [CORAL, 420, -260, 560, .22]])}
     ${shot('predict-detail-panel.png', 64, 64, 330, 672)}
     ${shot('record-detail-panel.png', 414, 112, 330, 640)}
@@ -112,9 +113,9 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, dev
 for (const [name, body] of slides) {
   await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body>${body}</body></html>`);
   await page.evaluate(() => document.fonts.ready);
-  const big = path.join(OUT, '2x', name);
+  const big = path.join(BIG, name);
   await page.screenshot({ path: big });
-  execFileSync('sips', ['-z', '800', '1280', big, '--out', path.join(OUT, name)], { stdio: 'ignore' });
+  execFileSync('sips', ['-z', '800', '1280', big, '--out', path.join(STORE, name)], { stdio: 'ignore' });
 }
 await browser.close();
 console.log('composed →', OUT);

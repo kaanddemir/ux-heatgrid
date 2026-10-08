@@ -79,6 +79,8 @@ export interface TabRuntime {
   };
   /** Recorded Interaction diagnostics (isolated world only; never sent over the protocol). */
   recordedDiagnostics(): unknown;
+  /** The side panel closed: hide the page visualization (results and any recording are kept). */
+  panelClosed(): void;
   dispose(): void;
 }
 
@@ -501,6 +503,9 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
         overlay: recordedOverlay?.inspect?.() ?? null,
         stats: recordedOverlay?.stats ? { ...recordedOverlay.stats } : null,
       };
+    },
+    panelClosed() {
+      if (interactionView !== 'none' || focusedElementId !== null) setView('none', undefined);
     },
     handoffRecording: () => session.handoff(),
     hasActiveSession: () => (ACTIVE_STATES as readonly string[]).includes(session.snapshot().state),

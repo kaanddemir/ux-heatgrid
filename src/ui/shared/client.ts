@@ -2,7 +2,7 @@
  * Extension-page client for the content runtime: tab resolution, injection, typed requests,
  * and event subscription for the side panel; owns no state.
  */
-import { BUILD_ID, CONTENT_RUNTIME_FILE, isRestrictedUrl } from '../../shared/constants';
+import { BUILD_ID, CONTENT_RUNTIME_FILE, PANEL_PORT, isRestrictedUrl } from '../../shared/constants';
 import { makeError, type HeatGridError } from '../../shared/model';
 import {
   isEvent,
@@ -54,6 +54,27 @@ export function classifyInjectionError(message: string): HeatGridError {
  * Ensures the current V2 build is running in the tab. Must be called from a user action
  * (it relies on the activeTab grant). Idempotent: PING first, inject only if missing or stale.
  */
+const panelPorts = new Map<number, chrome.runtime.Port>();
+
+/**
+ * Keeps one port open to the tab's runtime while this panel is open. Closing the panel closes the
+ * port, which tells the runtime to hide its page visualization. Idempotent; reconnects after the
+ * runtime was replaced (navigation, reinjection).
+ */
+export function attachPanel(tabId: number): void {
+  if (panelPorts.has(tabId)) return;
+  try {
+    const port = chrome.tabs.connect(tabId, { name: PANEL_PORT, frameId: 0 });
+    panelPorts.set(tabId, port);
+    port.onDisconnect.addListener(() => {
+      void chrome.runtime.lastError; // runtime gone: expected
+      if (panelPorts.get(tabId) === port) panelPorts.delete(tabId);
+    });
+  } catch {
+    // no runtime in this tab
+  }
+}
+
 export async function ensureRuntime(tab: chrome.tabs.Tab): Promise<Response<{ injected: boolean }>> {
   if (tab.id === undefined) return { ok: false, error: makeError('INTERNAL', 'Tab has no id') };
   if (isRestrictedUrl(tab.url)) {

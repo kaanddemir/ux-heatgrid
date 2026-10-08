@@ -79,7 +79,9 @@ export function recordedWarnings(m: RecordedViewModel, h?: Pick<RecordedHandlers
     state === 'error' ? { id: 'recording-failed', severity: 'critical', message: 'Recording could not be processed', detail: 'Start a new recording to try again.', action: h ? button('Start recording', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'recording-recover', subtle: true }) : null } : null,
     p && !p.pageOpen ? { id: 'recording-page-not-open', severity: 'action', message: NOT_OPEN_COPY } : null,
     p?.pageOpen && !p.elementsLive ? { id: 'recording-elements-not-live', severity: 'warning', message: NOT_LIVE_COPY } : null,
-    p?.layoutMayHaveChanged ? { id: 'recording-page-changed', severity: 'warning', message: LAYOUT_COPY } : null,
+    p?.layoutMayHaveChanged
+      ? { id: 'recording-page-changed', severity: 'action', message: LAYOUT_COPY, detail: 'The map may not line up with the page.', action: h ? button('Record again', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'record-again-layout', subtle: true }) : null }
+      : null,
     m.note ? { id: 'recording-note', severity: 'info', message: m.note } : null,
     ...limitations.map((code): NoticeIssue => ({
       id: code === 'PAGE_CHANGED' ? 'recording-page-changed' : `recording-limit-${code.toLowerCase()}`,

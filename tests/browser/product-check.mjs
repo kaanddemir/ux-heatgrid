@@ -80,7 +80,7 @@ try {
   const ov = await ptext();
   widths.overview = await noHScroll();
   await shot('overview');
-  const navLabels = await panel.eval(`[...document.querySelectorAll('[role="tablist"][aria-label="HeatGrid sections"] [role="tab"]')].map((t) => t.textContent)`);
+  const navLabels = await panel.eval(`[...document.querySelectorAll('[role="tablist"][aria-label="UX HeatGrid sections"] [role="tab"]')].map((t) => t.textContent)`);
   const cards = await panel.eval(`[...document.querySelectorAll('.mode')].map((c) => c.getAttribute('aria-label'))`);
   check('1/2. Overview: tabs Overview · Predict · Record; page identity + Predict + Record panels; no Coach', JSON.stringify(navLabels) === '["Overview","Predict","Record"]' && JSON.stringify(cards) === '["Predict","Record"]' && (await panel.eval(`!!document.querySelector('.page-id .page-title')`)) && !/coach|finding|Developer details|Analysis JSON|Raw state|Run analyzer/i.test(ov), { navLabels, cards });
 

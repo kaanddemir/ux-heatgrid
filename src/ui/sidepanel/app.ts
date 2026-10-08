@@ -21,6 +21,8 @@ export interface PanelApi {
   request<T extends RequestType>(tabId: number, type: T, payload: RequestMap[T]['payload']): Promise<Response<RequestMap[T]['data']>>;
   ensureRuntime(tab: chrome.tabs.Tab): Promise<Response<{ injected: boolean }>>;
   activeTab(): Promise<chrome.tabs.Tab | null>;
+  /** Ties the tab's page visualization to this panel being open (see client.attachPanel). */
+  attach?(tabId: number): void;
 }
 
 export interface PanelApp {
@@ -109,8 +111,8 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     return el(
       'header',
       { class: 'appbar' },
-      el('div', { class: 'appbar-row' }, el('div', { class: 'brand' }, el('img', { class: 'brand-mark', attrs: { src: '../icons/icon32.png', alt: '', width: '20', height: '20' } }), el('span', { class: 'brand-name', text: 'HeatGrid' })), livePill()),
-      tablist('HeatGrid sections', SECTIONS.map((s) => ({ id: s.id, text: s.label, selected: nav.section === s.id, controls: 'main-view', onSelect: () => goTo(s.id) })), 'nav'),
+      el('div', { class: 'appbar-row' }, el('div', { class: 'brand' }, el('img', { class: 'brand-mark', attrs: { src: '../icons/icon32.png', alt: '', width: '20', height: '20' } }), el('span', { class: 'brand-name', text: 'UX HeatGrid' })), livePill()),
+      tablist('UX HeatGrid sections', SECTIONS.map((s) => ({ id: s.id, text: s.label, selected: nav.section === s.id, controls: 'main-view', onSelect: () => goTo(s.id) })), 'nav'),
     );
   }
 
@@ -371,6 +373,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     const res = await api.ensureRuntime(tab);
     if (tabId() !== id) throw TAB_CHANGED;
     if (!res.ok) error = res.error;
+    else api.attach?.(id);
     return res.ok;
   }
 
@@ -575,8 +578,9 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     else if (p.predictionId && p.predictionId !== result?.predictionId) void track(loadSummary().then(render));
     syncRecordedData(next);
     const r = route(nav, intent, next);
-    // Predict / Stop finish in place: the panel stays where it is; only the page shows the new map.
-    if (r.nav !== nav && r.nav.section === 'record' && next.recorded?.pageOpen && next.interactionView !== 'recorded') void setView('recorded');
+    // Predict / Stop finish in place: the panel stays where it is; only the page shows the new map
+    // (whichever tab Stop was pressed on).
+    if (intent === 'stop' && r.intent === null && next.session.state === 'ready' && next.recorded?.pageOpen && next.interactionView !== 'recorded') void setView('recorded');
     intent = r.intent;
     render();
   }
@@ -604,6 +608,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     const res = await api.request(nextTabId, 'GET_STATE', null);
     if (generation !== refreshGeneration || tabId() !== nextTabId) return;
     if (res.ok) {
+      api.attach?.(nextTabId);
       if (res.data.prediction.predictionId) await loadSummary(nextTabId);
       if (generation !== refreshGeneration || tabId() !== nextTabId) return;
       apply(res.data);

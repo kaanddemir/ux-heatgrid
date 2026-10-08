@@ -197,6 +197,34 @@ describe('Panel app', () => {
     expect(root.querySelector('.page-host')!.textContent).toBe('new.example');
   });
 
+  it('Stop shows the recorded map on the page from any tab, like Predict', async () => {
+    for (const from of ['nav-record', 'nav-overview']) {
+      const { app, btn, click, settle, state, rt } = setup();
+      await app.refresh();
+      await settle();
+      rt.handle(makeRequest('START_SESSION', { source: 'sidepanel' }) as RequestEnvelope);
+      await settle();
+      await click(from);
+      if (from === 'nav-overview' && !btn('Stop')) await click('ov-record');
+      await click('Stop');
+      expect(state().session.state).toBe('ready');
+      expect([from, state().interactionView]).toEqual([from, 'recorded']);
+      rt.dispose();
+    }
+  });
+
+  it('closing the side panel hides the page visualization but keeps the results', async () => {
+    const { rt, state } = setup();
+    rt.handle(makeRequest('RUN_PREDICTION', { source: 'sidepanel' }) as RequestEnvelope);
+    rt.handle(makeRequest('SET_INTERACTION_VIEW', { view: 'predicted' }) as RequestEnvelope);
+    expect(state().interactionView).toBe('predicted');
+    rt.panelClosed();
+    expect(state().interactionView).toBe('none');
+    expect(state().prediction.state).toBe('ready'); // result kept: Show on page brings it back
+    rt.panelClosed(); // idempotent
+    expect(state().interactionView).toBe('none');
+  });
+
   it('a command response that arrives after switching tabs never lands on the new tab', async () => {
     let current = 1;
     const sent: Array<[number, string]> = [];
@@ -241,7 +269,7 @@ describe('Panel app', () => {
     const { app, root, settle } = setup();
     await app.refresh();
     await settle();
-    const tabs = [...root.querySelectorAll('[role="tablist"][aria-label="HeatGrid sections"] [role="tab"]')];
+    const tabs = [...root.querySelectorAll('[role="tablist"][aria-label="UX HeatGrid sections"] [role="tab"]')];
     expect(tabs.map((t) => [t.textContent, t.getAttribute('aria-selected')])).toEqual([['Overview', 'true'], ['Predict', 'false'], ['Record', 'false']]);
     expect(root.querySelector('.page-id .page-host')!.textContent).toBe('example.test');
     const toggles = [...root.querySelectorAll<HTMLButtonElement>('button.mode-toggle')];
@@ -560,7 +588,7 @@ describe('Recorded multi-page view', () => {
     )!;
     expect((closedFilter.querySelector('[data-key="rec-heat"]') as HTMLInputElement).disabled).toBe(true); // cannot draw over another page
     const b = recordedBody({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }, noop);
-    expect(recordedWarnings({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Layout may have changed since recording');
+    expect(recordedWarnings({ snap, session, page: page({ position: 1, path: '/checkout', pageOpen: true, elementsLive: true, layoutMayHaveChanged: true }), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Layout changed');
     expect(b.textContent).not.toMatch(/outdated|stale/i); // historical, not Prediction-stale
     expect(b.textContent).not.toMatch(/[?#]/);
     // Phase 9: a processing failure is explained, not shown as "No recording yet".

@@ -7,7 +7,7 @@ import type { RecordedListItem } from '../../content/recorded/lists';
 
 export const NOT_OPEN_COPY = 'Page not open · map not drawn';
 export const NOT_LIVE_COPY = 'Page reloaded since · controls can’t be outlined';
-export const LAYOUT_COPY = 'Layout may have changed since recording';
+export const LAYOUT_COPY = 'Layout changed';
 
 export const LIST_COPY = {
   mostInteracted: { title: 'Interacted Elements' },
@@ -24,7 +24,7 @@ export const RECORDED_LIMITATION_COPY: Record<RecordedLimitationCode, string> = 
   LONG_SESSION_COARSENED: 'Long session: later pointer data was kept at lower resolution.',
   CANDIDATES_CAPPED: 'Very many controls: only some were tracked.',
   MULTI_PAGE_SESSION_COARSENED: 'Earlier pages were kept at lower resolution to stay within the storage budget.',
-  RECORDING_INTERRUPTED_UNSUPPORTED_PAGE: 'Recording was interrupted on a page HeatGrid cannot access.',
+  RECORDING_INTERRUPTED_UNSUPPORTED_PAGE: 'Recording was interrupted on a page UX HeatGrid cannot access.',
   REPROJECTION_UNCERTAIN: 'Some controls moved a lot during recording; their pointer time is shown where it was recorded.',
 };
 

@@ -9,6 +9,10 @@
   and draws both right on the page from a side panel.
 </p>
 
+<p align="center">
+  <a href="https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn"><b>Install from the Chrome Web Store</b></a>
+</p>
+
 
 ## How it works
 
@@ -49,7 +53,7 @@ Expand any result to see the evidence behind it: the structural reasons in Predi
 
 ## Installation
 
-**From the Chrome Web Store:** search for **UX HeatGrid** and choose **Add to Chrome**.
+**From the Chrome Web Store:** open [UX HeatGrid on the Chrome Web Store](https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn) and choose **Add to Chrome**.
 
 **From source** (Chrome 116 or newer, Node.js 18 or newer):
 
