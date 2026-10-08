@@ -1,61 +1,67 @@
-# Privacy Policy
+# HeatGrid Privacy Policy
 
-Last updated: October 8, 2026
+Last updated: October 8, 2026 · Applies to HeatGrid 2.0.0
 
-## UX HeatGrid Chrome Extension
+HeatGrid is a Chrome extension that inspects the page you are viewing. It analyses page structure (**Predict**) and, only when you start it, records your own interaction with the page (**Record**). All processing happens locally in your browser.
 
-UX HeatGrid is a local-first page inspection tool. It analyzes the active page and, only when you explicitly start recording, captures your interaction with that page to create a local interaction map.
+## Summary
 
-## Data collected and processed
+- HeatGrid makes no network requests. It has no servers, analytics, advertising, telemetry or tracking code.
+- Nothing HeatGrid processes is sent to the developer or to any third party.
+- HeatGrid runs only on a tab after you click its toolbar icon, and only Predict or Record when you start them.
+- Form values, passwords, typed text and the keys you press are never read.
+- Recorded data is temporary and is removed when you clear it, start a new recording, close the tab or end the browser session.
 
-HeatGrid does not send personal data, browsing activity or page data to the developer or to any external service. It has no analytics, advertising, telemetry or tracking SDK.
+## What HeatGrid processes
 
-To provide its features, the extension processes the following information locally in your browser:
+**Page information (Predict and Record).** When you start Predict or Record, HeatGrid reads the page's structure in your browser: interactive controls, their size, position, computed style and colour contrast, and nearby headings and landmarks. To name controls it uses accessible labels — `aria-label`, `title`, `alt`, `placeholder` and visible text of the control itself. It never reads the content of form fields.
 
-- Page structure, computed layout and styling needed for prediction.
-- Short accessible-name-like labels for page regions and controls.
-- During an explicit recording: pointer positions, clicks, keyboard/assistive control activations, hover duration, focus events, visibility/exposure timing and scroll depth.
-- Page origin/path and a bounded page title for multi-page recording continuity. Query strings and URL fragments are not retained in recording results.
+**Interaction data (Record only).** While a recording is running, HeatGrid captures your:
 
-HeatGrid does **not** read or store form values, password values, textarea contents, selected values, clipboard data, cookies, authentication data or the actual keys you press.
+- pointer positions (sampled) and the control under the pointer
+- clicks, and activations of controls by keyboard or assistive technology (it registers *that* a control was activated, not which key was pressed)
+- hover and focus on controls
+- how long controls were visible in the viewport, and scroll depth
 
-## Local storage and retention
+**Page identity (Record only).** For each recorded page it keeps the page's origin and path and a title shortened to 80 characters. Query strings and URL fragments are not kept.
 
-Processing occurs on-device.
+**Side panel.** The side panel shows the current tab's title and domain, which Chrome provides after you click the toolbar icon.
 
-- Prediction data and completed recording results are held by the injected runtime in the inspected tab.
-- During a recording that crosses full-page navigation, finalized page segments are temporarily kept in `chrome.storage.session`. This allows the Manifest V3 service worker to resume the same recording after navigation or worker suspension.
-- Temporary session data is removed when the recording is stopped and collected, explicitly cleared, replaced by a new recording, or when the tab closes. `chrome.storage.session` is also cleared when the browser session ends.
+## Where data is kept and for how long
 
-HeatGrid does not use synchronized or permanent extension storage for recorded activity.
+| Data | Where | Removed when |
+| --- | --- | --- |
+| Prediction results | Memory of the page's HeatGrid runtime | You reset it, the page is reloaded or navigated away, or the tab closes |
+| Completed recording report | Memory of the page's HeatGrid runtime | You clear it, start a new recording, navigate away, or the tab closes |
+| Recording segments during multi-page sessions | `chrome.storage.session` | The recording is stopped (collected into the report), cleared or replaced, or the tab closes |
+| Small per-tab status record (session state and totals, no page content) | `chrome.storage.session` | The tab closes |
 
-## Network communication and sharing
+`chrome.storage.session` is held in memory by Chrome and is cleared when the browser session ends. HeatGrid does not use `storage.local`, `storage.sync`, cookies or any persistent storage, and recordings are never saved between browser sessions.
 
-HeatGrid makes no application network requests and does not transmit processed data to the developer, analytics providers, advertisers or other third parties. Chrome may separately handle installation, updates and Chrome Web Store services under Google's policies.
+## Sharing
 
-We do not sell or share user data.
+HeatGrid does not transmit, sell or share any data. The developer never receives it. Chrome itself may handle installation and updates under Google's policies.
 
-HeatGrid's use of information received through Chrome APIs adheres to the Chrome Web Store User Data Policy, including its Limited Use requirements. Data is used only to provide the user-facing page inspection and recording features described above; it is not used for advertising, credit decisions or unrelated purposes, and the developer does not receive or read it.
+HeatGrid's use of information received through Chrome APIs adheres to the [Chrome Web Store User Data Policy](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq), including the Limited Use requirements. Data is used only to provide the page-inspection and recording features described here.
 
 ## Permissions
 
 | Permission | Purpose |
 | --- | --- |
-| `activeTab` | Temporarily access the current tab after the user invokes HeatGrid. |
-| `scripting` | Inject the HeatGrid runtime on demand. |
-| `sidePanel` | Display the Overview · Predict · Record inspector. |
-| `storage` | Use session-only storage for lifecycle recovery and multi-page recording continuity. |
+| `activeTab` | Temporary access to the current tab after you click the HeatGrid toolbar icon. |
+| `scripting` | Inject the HeatGrid runtime into that tab on demand. |
+| `sidePanel` | Display the Overview · Predict · Record side panel. |
+| `storage` | Session-only storage used to continue a recording across page navigations. |
 
-HeatGrid requests no broad host permissions and does not automatically inject into every visited page.
+HeatGrid requests no host permissions and is not injected into pages automatically.
 
-## User control
+## Your control
 
-Prediction and recording start only from explicit HeatGrid actions. You can stop or clear a recording from the side panel. Closing the inspected tab removes its temporary lifecycle and recording storage.
-
-## Security
-
-HeatGrid uses local extension code only. Page overlays are isolated in closed Shadow DOM roots, page-facing overlay nodes are pointer-transparent except for their own controls, and user-facing labels are inserted as text rather than executable HTML.
+- Predict and Record start only when you choose **Start**.
+- Stop a recording at any time; **Clear recording** and **Reset prediction** remove results immediately.
+- Closing the tab removes all of HeatGrid's data for that tab.
+- Uninstalling HeatGrid removes the extension and its storage.
 
 ## Changes and contact
 
-Material changes to this policy will be reflected by updating the date above. Questions can be submitted through the project's GitHub issue tracker.
+Changes to this policy will be published in this file with an updated date. Questions can be raised on the project's GitHub issue tracker: <https://github.com/kaanddemir/ux-heatgrid/issues>.

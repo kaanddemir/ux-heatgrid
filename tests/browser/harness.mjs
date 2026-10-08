@@ -85,13 +85,15 @@ class TargetTunnel {
   }
 }
 
-export async function launch() {
+/** `extraArgs`: extra Chrome flags; `contextOptions`: Playwright context overrides (e.g. viewport, deviceScaleFactor). */
+export async function launch({ extraArgs = [], contextOptions = {} } = {}) {
   const userDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hg-validate-'));
   const ctx = await chromium.launchPersistentContext(userDir, {
     headless: true,
     executablePath: process.env.CHROME_PATH,
     viewport: { width: 1280, height: 800 },
-    args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, '--enable-unsafe-extension-debugging'],
+    args: [`--disable-extensions-except=${DIST}`, `--load-extension=${DIST}`, '--enable-unsafe-extension-debugging', ...extraArgs],
+    ...contextOptions,
   });
   let [sw] = ctx.serviceWorkers();
   if (!sw) sw = await ctx.waitForEvent('serviceworker');

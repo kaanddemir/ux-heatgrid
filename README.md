@@ -1,72 +1,113 @@
-# UX HeatGrid 2.0
+# HeatGrid
 
-UX HeatGrid is a local-first Chrome side-panel extension for inspecting page structure and recording your own interaction session on the active tab.
+**See how a page is built to be used — and how you actually used it.**
 
-## Product structure
+HeatGrid is a Chrome side-panel extension for designers and developers. It estimates which controls on a page stand out structurally, records your own interaction session, and draws both directly on the page. Everything runs locally in your browser.
 
-- **Overview** — current page identity and compact Predict/Record summaries.
-- **Predict** — a deterministic, heuristic assessment of which interactive controls are structurally more prominent on the current page. Results are relative bands, not probabilities or observed user behavior.
-- **Record** — a local visualization of the clicks, activations, pointer presence, hover, focus, exposure and scrolling captured during your own recording session.
 
-## Privacy and data handling
+## Capabilities
 
-HeatGrid performs analysis locally and has no analytics, advertising, tracking SDKs or application network service. It does not read form values or key values.
+| | |
+| --- | --- |
+| **Overview** | Page title and domain, with compact Predict and Record summaries and one-click Start for each. |
+| **Predict** | Ranks the page's interactive controls into **High**, **Medium** and **Low** structural prominence, with the reasons and confidence behind each result. |
+| **Record** | Captures your own session — clicks, pointer presence, hover, focus, time in view and scroll depth — and turns it into a report and an on-page map. |
 
-While a recording crosses a full-page navigation, finalized page segments are temporarily stored in `chrome.storage.session` so the service worker can resume the session. Temporary recording data is removed when the recording is collected or cleared, when its tab closes, or when the browser session ends. Prediction and completed-report state otherwise lives in the tab's injected runtime.
+### Predict
 
-See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) for the complete disclosure.
+Predict analyses the current page's structure: size, position, visual style, contrast, competing controls nearby and page context. It needs no recording data.
+
+- Results grouped by band, filterable by band and control type
+- Per-element **Why** reasons, area and confidence
+- **Show on page** outlines the controls by band, with an on-page legend and filter
+- Marks results as stale when the page changes; re-run or reset at any time
+
+Predict is a deterministic structural heuristic. It describes how prominent a control is in the layout — it does not predict real clicks or user attention.
+
+
+### Record
+
+Start a recording, use the page as usual, and stop when you are done.
+
+- Duration, clicks, scroll depth and interacted controls
+- **Interacted Elements** with clicks, hover, focus and time in view per control
+- **No Interaction** — controls that were in view but never used
+- On-page **heatmap**, **click markers** and **scroll depth**, each with its own toggle
+- Continues across same-site page navigations as one multi-page session
+
+A recording describes one session in one browser — yours — not the behaviour of a site's visitors.
+
+
+### Inspect
+
+Expand any result to see the evidence behind it, and highlight the element on the page.
+
+
+## Privacy
+
+HeatGrid has no servers, analytics or tracking, and makes no network requests. Page analysis and recordings stay in your browser; temporary recording data lives only in session storage and is removed when you stop, clear, or close the tab. Form values and typed keys are never read. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 ## Permissions
 
-- `activeTab` — grants temporary access to the tab after the user clicks HeatGrid.
-- `scripting` — injects the V2 runtime on demand into the active tab.
-- `sidePanel` — opens the Overview · Predict · Record inspector.
-- `storage` — uses session-only extension storage for lifecycle recovery and multi-page recording continuity.
+| Permission | Why |
+| --- | --- |
+| `activeTab` | Access the current tab only after you click the HeatGrid toolbar icon. |
+| `scripting` | Inject the HeatGrid runtime into that tab on demand. |
+| `sidePanel` | Show the Overview · Predict · Record inspector. |
+| `storage` | Session-only storage for multi-page recording continuity. |
 
-HeatGrid requests no host permissions and cannot run on restricted Chrome pages or pages for which Chrome has not granted access.
+No host permissions are requested, and HeatGrid never runs on a page you haven't opened it on.
 
-## Development
+## Supported behaviour and limitations
 
-Requirements: Node.js 18 or newer and Chrome 116 or newer.
+- Works on regular `http`/`https` pages. Chrome internal pages, the Chrome Web Store and other restricted pages are not supported.
+- Same-frame content only; cross-origin iframes are not analysed or recorded.
+- A recording continues across navigations within pages Chrome lets HeatGrid access; reaching a page where it cannot run interrupts continuity but keeps earlier data.
+- Recordings and predictions are not saved between browser sessions.
+
+## Install
+
+**Chrome Web Store** — install HeatGrid from its store listing.
+
+**From source** (Chrome 116+, Node.js 18+):
 
 ```sh
 npm install
-npm run check
+npm run build
 ```
 
-`npm run check` runs the TypeScript check, unit suite and production build. The production extension is written to `dist/`.
+Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked** and select the generated `dist/` folder.
 
-For watch mode:
+## Development
 
 ```sh
-npm run dev
+npm run dev        # watch build into dist/
+npm run typecheck  # TypeScript
+npm test           # unit tests (Vitest)
+npm run check      # typecheck + tests + production build
 ```
 
-## Manual installation
+Real-Chrome regression checks live in [tests/browser](tests/browser/README.md).
 
-1. Run `npm run build`.
-2. Open `chrome://extensions`.
-3. Enable Developer mode.
-4. Choose **Load unpacked**.
-5. Select the generated `dist/` directory, not the repository root.
-
-The V1 popup implementation was removed in 2.0.0; it remains available in git history.
-
-## Architecture
+## Project structure
 
 ```text
 src/
-├── background/       # MV3 service worker and session-continuity store
-├── content/          # analyzer, prediction, recorder and page overlays
-├── shared/           # protocol and lifecycle models
-├── ui/sidepanel/     # Overview · Predict · Record inspector
-└── manifest.json     # production manifest source
-scripts/build.mjs      # src/ → dist/
-tests/                 # unit and real-Chrome regression checks
+├── background/     MV3 service worker and recording-continuity store
+├── content/        analyzer, prediction, recorder, recorded maps, page overlays
+├── shared/         protocol and lifecycle models
+├── ui/sidepanel/   Overview · Predict · Record side panel
+└── manifest.json
+assets/
+├── brand/          icon source (SVG) and icon renderer
+└── store/          store listing copy and the scripts that capture and compose the screenshots
+icons/              extension icons (generated from assets/brand)
+scripts/build.mjs   src/ → dist/
+tests/              unit and real-Chrome checks
 ```
 
-The extension uses local DOM APIs, Canvas, closed Shadow DOM overlays and typed Chrome messaging. User-facing strings are created with `textContent`; production code does not inject remote scripts or HTML strings.
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## License
 
-Distributed under the MIT License. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

@@ -3,7 +3,7 @@
   "name": "UX HeatGrid",
   "version": "2.0.0",
   "version_name": "2.0.0",
-  "description": "Record how you move through a page, see it as an interaction map, and inspect the page structure around it.",
+  "description": "Predict which controls stand out on a page and record your own session as an on-page interaction map.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
   "background": {

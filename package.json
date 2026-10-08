@@ -2,7 +2,7 @@
   "name": "ux-heatgrid",
   "version": "2.0.0",
   "private": true,
-  "description": "UX HeatGrid V2 — interaction-first design inspection extension",
+  "description": "HeatGrid — Predict and Record page interactions in a Chrome side panel",
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",

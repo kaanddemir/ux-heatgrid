@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- 16 px optical master: full-bleed tile, 2×2 grid on whole pixels (blue structure → coral hot cell). -->
+  <rect x="0.5" y="0.5" width="15" height="15" rx="3.25" fill="#0D0F13" stroke="#FFFFFF" stroke-opacity="0.14"/>
+  <rect x="3" y="3" width="4" height="4" rx="1" fill="#397BFA" opacity="0.45"/>
+  <rect x="9" y="3" width="4" height="4" rx="1" fill="#397BFA"/>
+  <rect x="3" y="9" width="4" height="4" rx="1" fill="#397BFA"/>
+  <rect x="9" y="9" width="4" height="4" rx="1" fill="#FF6B57"/>
+</svg>
