@@ -1,113 +1,98 @@
-# HeatGrid
+<p align="center">
+  <img src="icons/icon128.png" alt="UX HeatGrid" width="96">
+</p>
 
-**See how a page is built to be used — and how you actually used it.**
+<h1 align="center">UX HeatGrid</h1>
 
-HeatGrid is a Chrome side-panel extension for designers and developers. It estimates which controls on a page stand out structurally, records your own interaction session, and draws both directly on the page. Everything runs locally in your browser.
+<p align="center">
+  A Chrome extension that shows which controls stand out on a page, records how you use it,<br>
+  and draws both right on the page from a side panel.
+</p>
 
 
-## Capabilities
+## How it works
 
-| | |
-| --- | --- |
-| **Overview** | Page title and domain, with compact Predict and Record summaries and one-click Start for each. |
-| **Predict** | Ranks the page's interactive controls into **High**, **Medium** and **Low** structural prominence, with the reasons and confidence behind each result. |
-| **Record** | Captures your own session — clicks, pointer presence, hover, focus, time in view and scroll depth — and turns it into a report and an on-page map. |
+1. Open any web page and click the **UX HeatGrid** icon in the Chrome toolbar. The side panel opens.
+2. Under **Predict**, press **Start** to see which controls stand out in the page's structure.
+3. Under **Record**, press **Start**, use the page as usual, then press **Stop** to see your session.
+4. Press **Show on page** in either view to draw the results directly on the page.
 
-### Predict
+## Predict
 
-Predict analyses the current page's structure: size, position, visual style, contrast, competing controls nearby and page context. It needs no recording data.
 
-- Results grouped by band, filterable by band and control type
-- Per-element **Why** reasons, area and confidence
+Predict ranks every button, link and control on the page into **High**, **Medium** and **Low** structural prominence. It looks at size, position, visual style, text contrast, nearby competing controls and page context. No recording is needed.
+
+- Results grouped by band, with filters for band and control type
+- **Why** reasons, page area and confidence for every element
 - **Show on page** outlines the controls by band, with an on-page legend and filter
-- Marks results as stale when the page changes; re-run or reset at any time
+- Marks results as stale when the page changes, with **Re-run** and **Reset**
 
-Predict is a deterministic structural heuristic. It describes how prominent a control is in the layout — it does not predict real clicks or user attention.
+Predict is a structural estimate of prominence. It does not forecast real clicks or user attention.
+
+## Record
 
 
-### Record
+Record captures your own session on the page and turns it into a report and an on-page map.
 
-Start a recording, use the page as usual, and stop when you are done.
-
-- Duration, clicks, scroll depth and interacted controls
-- **Interacted Elements** with clicks, hover, focus and time in view per control
-- **No Interaction** — controls that were in view but never used
+- Live duration, clicks and scroll depth while recording
+- **Interacted Elements** with clicks, hover, focus and time in view for each control
+- **No Interaction** for controls that were in view but never used
 - On-page **heatmap**, **click markers** and **scroll depth**, each with its own toggle
-- Continues across same-site page navigations as one multi-page session
+- Continues across same-site navigations and reloads as one session
 
-A recording describes one session in one browser — yours — not the behaviour of a site's visitors.
+A recording describes your session in your browser, not the behaviour of a site's visitors.
 
-
-### Inspect
-
-Expand any result to see the evidence behind it, and highlight the element on the page.
+## Inspect
 
 
-## Privacy
+Expand any result to see the evidence behind it: the structural reasons in Predict, or the measured clicks, hover, focus and time in view in Record. The matching element is highlighted on the live page.
 
-HeatGrid has no servers, analytics or tracking, and makes no network requests. Page analysis and recordings stay in your browser; temporary recording data lives only in session storage and is removed when you stop, clear, or close the tab. Form values and typed keys are never read. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
+## Installation
 
-## Permissions
+**From the Chrome Web Store:** search for **UX HeatGrid** and choose **Add to Chrome**.
 
-| Permission | Why |
-| --- | --- |
-| `activeTab` | Access the current tab only after you click the HeatGrid toolbar icon. |
-| `scripting` | Inject the HeatGrid runtime into that tab on demand. |
-| `sidePanel` | Show the Overview · Predict · Record inspector. |
-| `storage` | Session-only storage for multi-page recording continuity. |
+**From source** (Chrome 116 or newer, Node.js 18 or newer):
 
-No host permissions are requested, and HeatGrid never runs on a page you haven't opened it on.
-
-## Supported behaviour and limitations
-
-- Works on regular `http`/`https` pages. Chrome internal pages, the Chrome Web Store and other restricted pages are not supported.
-- Same-frame content only; cross-origin iframes are not analysed or recorded.
-- A recording continues across navigations within pages Chrome lets HeatGrid access; reaching a page where it cannot run interrupts continuity but keeps earlier data.
-- Recordings and predictions are not saved between browser sessions.
-
-## Install
-
-**Chrome Web Store** — install HeatGrid from its store listing.
-
-**From source** (Chrome 116+, Node.js 18+):
-
-```sh
+```bash
 npm install
 npm run build
 ```
 
-Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked** and select the generated `dist/` folder.
+Then open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and select the `dist` folder.
+
+## Permissions
+
+| Permission | Why it is needed |
+| --- | --- |
+| `activeTab` | Access the current tab, only after you click the toolbar icon |
+| `scripting` | Load UX HeatGrid into that tab when you use it |
+| `sidePanel` | Show the Overview, Predict and Record panel |
+| `storage` | Keep a recording going across page navigations (session only) |
+
+UX HeatGrid requests no host permissions and never runs on a page until you open it there.
+
+## Privacy
+
+UX HeatGrid has no accounts, servers, analytics or tracking, and makes no network requests. Page analysis and recordings stay in your browser and are cleared when you reset them, close the tab or end the browser session. Form values and the keys you type are never read.
+
+Read the full [Privacy Policy](PRIVACY_POLICY.md).
+
+## Good to know
+
+- Works on regular websites. Chrome's own pages and the Chrome Web Store cannot be inspected.
+- Content inside cross-origin iframes is not analysed or recorded.
+- Results are not saved between browser sessions.
 
 ## Development
 
-```sh
-npm run dev        # watch build into dist/
-npm run typecheck  # TypeScript
-npm test           # unit tests (Vitest)
-npm run check      # typecheck + tests + production build
+```bash
+npm run dev         # rebuild dist on every change
+npm test            # unit tests
+npm run check       # typecheck, tests and production build
 ```
 
-Real-Chrome regression checks live in [tests/browser](tests/browser/README.md).
-
-## Project structure
-
-```text
-src/
-├── background/     MV3 service worker and recording-continuity store
-├── content/        analyzer, prediction, recorder, recorded maps, page overlays
-├── shared/         protocol and lifecycle models
-├── ui/sidepanel/   Overview · Predict · Record side panel
-└── manifest.json
-assets/
-├── brand/          icon source (SVG) and icon renderer
-└── store/          store listing copy and the scripts that capture and compose the screenshots
-icons/              extension icons (generated from assets/brand)
-scripts/build.mjs   src/ → dist/
-tests/              unit and real-Chrome checks
-```
-
-See [CHANGELOG.md](CHANGELOG.md) for release notes.
+Browser regression checks are described in [tests/browser](tests/browser/README.md). Release notes are in the [Changelog](CHANGELOG.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
