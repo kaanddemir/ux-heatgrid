@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Fixed and sticky</title><link rel="stylesheet" href="base.css">
+<style>#topbar{position:fixed;top:0;left:0;right:0;height:60px;background:#111;color:#fff;display:flex;align-items:center;gap:12px;padding:0 16px;z-index:5}
+#topbar a{color:#fff}#subnav{position:sticky;top:60px;background:#eee;padding:8px;z-index:4}
+#chat{position:fixed;right:16px;bottom:16px}main{padding-top:60px}.spacer{height:1200px}#offscreen{position:absolute;left:-9999px;top:0}
+#below{margin-top:200px}</style></head><body>
+<div id="topbar"><a id="fixed-link" href="/">Home</a><button id="fixed-btn">Menu</button></div>
+<main><h1>Article</h1><nav id="subnav" aria-label="Sections"><a id="sticky-link" href="#a">Section A</a></nav>
+<div class="spacer"></div><button id="mid">Middle button</button><div class="spacer"></div><button id="below">Far below</button><div class="spacer"></div></main>
+<button id="chat" class="btn">Chat</button><a id="offscreen" href="/skip">Skip to content</a>
+<button id="zero" style="width:0;height:0;padding:0;border:0;overflow:hidden"></button>
+</body></html>

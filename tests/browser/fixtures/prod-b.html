@@ -1,0 +1,23 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Page B fixture</title><link rel="stylesheet" href="base.css">
+<style>
+#hero{padding:48px;background:#f8fafc;height:520px}
+#hero h1{margin:0 0 16px}
+#toolbar{display:flex;gap:4px;margin:24px 0}
+#toolbar button{padding:8px 12px;background:#e5e7eb;border:0;border-radius:4px;font-size:14px}
+#actions{display:flex;gap:6px}
+#actions button{padding:10px 16px;background:#1d4ed8;color:#fff;border:0;border-radius:4px;font-size:15px;font-weight:600}
+#faux{display:inline-block;margin-top:24px;padding:12px 20px;background:#0f766e;color:#fff;border-radius:6px;font-weight:600}
+.faint{color:#b8b8b8;max-width:640px}
+.spacer{height:2200px;background:#fafafa}
+</style></head>
+<body>
+<section id="hero"><h1>Page B fixture</h1>
+<p class="faint">This paragraph is set in a pale grey on white, so its measured contrast is below the guideline for normal body text on this page.</p>
+<div id="toolbar"><button>Bold</button><button>Italic</button><button>Link</button><button>Quote</button><button>Code</button><button>List</button><button>Table</button><button>Undo</button></div>
+<div id="actions"><button id="start">Start</button><button id="plans">Plans</button><button id="demo">Demo</button><button id="contact">Contact</button></div>
+<div id="faux">Looks like a button</div>
+</section>
+<div class="spacer"></div>
+<footer style="padding:24px"><button id="bottom" class="btn">Lower-page control</button></footer>
+<script>window.__pageClicks = 0; document.addEventListener('click', () => window.__pageClicks++);</script>
+</body></html>

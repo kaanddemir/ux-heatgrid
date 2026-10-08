@@ -1,0 +1,17 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Dense nav</title><link rel="stylesheet" href="base.css">
+<style>.topbar{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;padding:8px}.topbar a{color:#333}.mega{display:none}
+.accordion .panel{max-height:0;overflow:hidden}.collapsed-menu{height:0;overflow:hidden}</style></head>
+<body><header><nav aria-label="Main" class="topbar">
+
+</nav></header>
+<main><h1>Category page</h1><p>Content</p><a id="cta" class="btn" href="/buy">Buy now</a>
+<div class="accordion"><button id="acc-toggle">Show more</button><div class="panel"><a id="acc-hidden-link" href="/hidden1">Hidden inside accordion</a><button id="acc-hidden-btn">Hidden button</button></div></div>
+<div class="collapsed-menu"><a id="zero-height-link" href="/x">Zero-height menu link</a></div>
+</main>
+<script>
+const nav = document.querySelector('.topbar');
+for (let i = 0; i < 80; i++) { const a = document.createElement('a'); a.href = '/c' + i; a.textContent = 'Category ' + i; nav.appendChild(a); }
+const mega = document.createElement('div'); mega.className = 'mega';
+for (let i = 0; i < 120; i++) { const a = document.createElement('a'); a.href = '/m' + i; a.textContent = 'Mega ' + i; mega.appendChild(a); }
+nav.appendChild(mega);
+</script></body></html>

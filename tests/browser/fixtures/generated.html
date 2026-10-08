@@ -1,0 +1,16 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Generated</title><link rel="stylesheet" href="base.css">
+<style>.card{display:inline-block;width:280px;margin:6px;padding:8px;border:1px solid #ddd;vertical-align:top}.card .meta{color:#666;font-size:13px}</style></head><body>
+<header><nav aria-label="Main" id="nav"></nav></header><main id="main"></main><footer id="foot"></footer>
+<script>
+// ?cards=N controls size; each card ≈ 12 nodes.
+const n = Number(new URLSearchParams(location.search).get('cards') || 50);
+const nav = document.getElementById('nav'); for (let i = 0; i < 12; i++) nav.insertAdjacentHTML('beforeend', `<a href="/n${i}">Nav ${i}</a> `);
+const main = document.getElementById('main');
+let html = '';
+for (let i = 0; i < n; i++) {
+  if (i % 40 === 0) html += `<h2>Group ${i / 40}</h2>`;
+  html += `<div class="card"><h3>Item ${i}</h3><p class="meta"><span>Tag</span> · <span>${i}</span></p><p>Description <em>text</em> for item ${i}.</p><div><a href="/i${i}">Open</a> <button>Save</button> <span class="ico" style="cursor:pointer">★</span></div></div>`;
+}
+main.innerHTML = html;
+document.getElementById('foot').innerHTML = Array.from({ length: 20 }, (_, i) => `<a href="/f${i}">Footer ${i}</a>`).join(' ');
+</script></body></html>

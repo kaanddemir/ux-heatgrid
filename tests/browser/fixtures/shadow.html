@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Shadow DOM</title><link rel="stylesheet" href="base.css"></head><body>
+<main><h1>Components</h1>
+<x-card id="open-card"></x-card>
+<x-closed id="closed-card"></x-closed>
+</main>
+<script>
+customElements.define('x-card', class extends HTMLElement { constructor() { super(); const r = this.attachShadow({ mode: 'open' });
+  r.innerHTML = '<style>:host{display:block;padding:16px;border:1px solid #ccc} button{background:#0a7;color:#fff;padding:10px}</style><h2 id="shadow-h">Open shadow heading</h2><p>Inside</p><button id="shadow-btn">Shadow action</button><x-inner></x-inner>'; } });
+customElements.define('x-inner', class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: 'open' }).innerHTML = '<a href="/deep">Deep nested link</a>'; } });
+customElements.define('x-closed', class extends HTMLElement { constructor() { super(); this.attachShadow({ mode: 'closed' }).innerHTML = '<button>Closed shadow action</button>'; } });
+</script></body></html>

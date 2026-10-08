@@ -1,0 +1,21 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Visibility</title><link rel="stylesheet" href="base.css">
+<style>.clip{overflow:hidden;height:40px;width:300px;border:1px solid #ccc}.clip .inner{margin-top:100px}
+.clip-x{overflow:hidden;width:200px;white-space:nowrap}.track{display:flex;transform:translateX(0)}.slide{flex:0 0 200px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}</style></head><body><main>
+<button id="v-visible">Visible</button>
+<button id="v-display-none" style="display:none">Display none</button>
+<button id="v-hidden" style="visibility:hidden">Visibility hidden</button>
+<table><tr id="v-collapse-row" style="visibility:collapse"><td><button id="v-collapse">Collapse</button></td></tr></table>
+<button id="v-opacity0" style="opacity:0">Opacity 0</button>
+<button id="v-opacity-tiny" style="opacity:0.03">Opacity 0.03</button>
+<button id="v-opacity-half" style="opacity:0.5">Opacity 0.5</button>
+<button id="v-zero" style="width:0;height:0;padding:0;border:0;overflow:hidden"></button>
+<button id="v-disabled" disabled>Disabled</button>
+<div id="v-aria-disabled" role="button" aria-disabled="true">Aria disabled</div>
+<a id="v-offscreen" href="/x" style="position:absolute;left:-9999px">Offscreen</a>
+<a id="v-sronly" class="sr-only" href="/skip">Skip link</a>
+<div class="clip"><div class="inner"><button id="v-clipped-out">Clipped out by ancestor</button></div></div>
+<div class="clip-x"><div class="track"><div class="slide"><button id="v-slide1">Slide 1</button></div><div class="slide"><button id="v-slide2">Slide 2</button></div><div class="slide"><button id="v-slide3">Slide 3</button></div></div></div>
+<div style="height:0;overflow:hidden"><button id="v-zero-height-parent">In zero-height parent</button></div>
+<div style="overflow:hidden;height:60px;position:relative"><button id="v-abs-escape" style="position:fixed;top:300px;left:300px">Fixed escapes clip</button></div>
+</main></body></html>
