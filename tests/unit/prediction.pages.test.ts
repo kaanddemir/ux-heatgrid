@@ -8,6 +8,7 @@ import { baselineRanking, type BaselineId } from '../helpers/baselines';
 import type { PredictionResult } from '../../src/content/prediction/types';
 import { el, predictPage } from '../helpers/predictPage';
 import { pages, type PageName } from '../fixtures/predictionPages';
+import { W } from '../../src/content/prediction/weights';
 
 const run = (name: PageName) => predictPage(pages[name]);
 const band = (r: PredictionResult, id: string) => el(r, id).band;
@@ -81,10 +82,13 @@ describe('page types', () => {
     expect(el(r, 'ft-10').reasons.map((x) => x.code)).toContain('FOOTER_CONTEXT');
   });
 
-  it('icon toolbar: tiny icon buttons carry TINY_TARGET and are not High', () => {
+  it('icon toolbar: tiny icon buttons are penalised in proportion to how small they are, and are not High', () => {
     const { result: r } = run('toolbar');
     expect(rank(r, 'share')).toBe(1);
-    expect(el(r, 'icon-3').reasons.map((x) => x.code)).toContain('TINY_TARGET');
+    // 22px is just under the 24px minimum: a small penalty, not the full one.
+    const tiny = el(r, 'icon-3').contributions.find((c) => c.feature === 'tinyTarget')!.contribution;
+    expect(tiny).toBeLessThan(0);
+    expect(tiny).toBeGreaterThan(-W.tinyTarget / 2);
     for (let i = 0; i < 14; i++) expect(band(r, `icon-${i}`)).not.toBe('high');
   });
 

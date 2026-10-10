@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from 'vitest';
-import { assignBands, buildReasons, confidenceFrom, predict } from '../../src/content/prediction/engine';
+import { assignBands, buildReasons, capBoundaryY, confidenceFor, predict, uncertaintyOf } from '../../src/content/prediction/engine';
 import { TERMS, scoreOne, suppressionsFor } from '../../src/content/prediction/heuristic';
 import type { Component, PredictionFeatures, PredictorOutput, ReasonCode, TermId } from '../../src/content/prediction/types';
 import { W } from '../../src/content/prediction/weights';
@@ -148,10 +148,43 @@ describe('banding', () => {
 });
 
 describe('confidence', () => {
-  it('maps caveat count to high / medium / low', () => {
-    expect(confidenceFrom([])).toBe('high');
-    expect(confidenceFrom(['CONTRAST_UNRESOLVED'])).toBe('medium');
-    expect(confidenceFrom(['CONTRAST_UNRESOLVED', 'HEURISTIC_DETECTION', 'WEAK_REGION'])).toBe('low');
+  it('describes band stability, not caveat count: far from every edge stays High despite caveats', () => {
+    expect(confidenceFor(Infinity, 0, [])).toBe('high');
+    expect(confidenceFor(0.3, 0.1, ['CONTRAST_UNRESOLVED', 'WEAK_REGION', 'STICKY_AMBIGUOUS'])).toBe('high');
+    expect(confidenceFor(W.BOUNDARY_EPSILON / 2, 0, ['NEAR_BAND_BOUNDARY'])).toBe('medium');
+    expect(confidenceFor(0.05, 0.06, ['CONTRAST_UNRESOLVED'])).toBe('low'); // the missing contrast alone could flip it
+    expect(confidenceFor(0.3, 0, ['HEURISTIC_DETECTION'])).toBe('medium'); // may not be a control at all
+  });
+
+  it('uncertainty is the score change a caveat could hide, and identity/boundary caveats add none', () => {
+    const o = out(1, 0.5, { contributions: [{ feature: 'foldDecay', transformedValue: -0.5, contribution: -0.06, component: 'prominence', reliability: 'core' }] });
+    expect(uncertaintyOf([], o, neutral())).toBe(0);
+    expect(uncertaintyOf(['HEURISTIC_DETECTION', 'NEAR_BAND_BOUNDARY'], o, neutral())).toBe(0);
+    expect(uncertaintyOf(['CONTRAST_UNRESOLVED'], o, neutral())).toBeCloseTo(W.contrast);
+    // Sticky: if it is stuck, the scroll-distance penalty would not apply.
+    expect(uncertaintyOf(['STICKY_AMBIGUOUS'], o, neutral())).toBeCloseTo(W.fixed - W.sticky + 0.06);
+  });
+
+  it('margins only count band edges the element can actually cross', () => {
+    const tie = () => 0;
+    // 10 controls: one strong distinctive control, the rest identical.
+    const outs = [out(1, 0.9, { prominenceGroups: { size: 0.2, position: 0, visual: 0.1 } }), ...Array.from({ length: 9 }, (_, i) => out(i + 2, 0.4, { prominenceGroups: { size: 0, position: 0.1, visual: 0 } }))];
+    const b = assignBands(outs, tie);
+    expect(b.bands.get(1)).toBe('high');
+    expect(b.margins.get(1)).toBeCloseTo(0.9 - Math.max(W.HIGH_FLOOR, b.thresholds.highRelative!));
+    // Identical Mediums without visual distinction cannot become High: only the Low edge counts.
+    expect(b.margins.get(5)).toBeCloseTo(0.4 - Math.max(W.LOW_FLOOR, b.thresholds.lowRelative!));
+    expect(assignBands([out(1, 0.9, { suppressions: ['DISABLED'] })], tie).margins.get(1)).toBe(Infinity);
+  });
+
+  it('the analysis cap only marks elements whose neighbourhood may be incomplete', () => {
+    const a = analyzePage(pages.landing);
+    expect(capBoundaryY(a)).toBeNull();
+    const capped = { ...a, coverage: { ...a.coverage, interactiveFound: a.coverage.interactiveIncluded + 10 } };
+    expect(capBoundaryY(capped)).toBeGreaterThan(0); // dropped controls sit after the last included screen
+    const hidden = { ...capped, elements: capped.elements.map((e, i) => (e.interactive && i === capped.elements.findIndex((x) => x.interactive) ? { ...e, render: { ...e.render, rendered: false } } : e)) };
+    expect(capBoundaryY(hidden)).toBeNull(); // a hidden control made the cut, so every rendered one did
+    expect(el(predict(a, { createdAt: 0, predictionId: 'x' }), 'cta').caveats).not.toContain('ANALYSIS_CAPPED');
   });
 
   it('heuristic-only controls carry HEURISTIC_DETECTION and lower confidence', () => {
@@ -206,6 +239,10 @@ describe('reasons and explainability', () => {
       ['opacityLoss', -0.02, 'REDUCED_OPACITY', 'availability'], ['fixed', 0.02, 'FIXED_POSITION', 'context'],
       ['headingRelation', 0.02, 'NEAR_HEADING', 'context'], ['navCluster', -0.02, 'NAV_CLUSTER', 'context'],
       ['footer', -0.02, 'FOOTER_CONTEXT', 'context'], ['heuristicDetection', -0.02, 'HEURISTIC_CONTROL', 'context'],
+      ['bordered', 0.02, 'BUTTON_SHAPE', 'prominence'], ['fontSizeRel', 0.02, 'LARGER_TEXT', 'prominence'],
+      ['fontSizeRel', -0.02, 'SMALLER_TEXT', 'prominence'], ['fontWeight', 0.02, 'BOLD_TEXT', 'prominence'],
+      ['fontWeight', -0.02, 'LIGHT_TEXT', 'prominence'], ['clearance', -0.02, 'TIGHT_SPACING', 'competition'],
+      ['sticky', 0.02, 'STICKY_POSITION', 'context'],
     ];
     for (const [feature, contribution, code, component, over = {}] of cases) {
       const reasons = buildReasons(out(1, 0.3, { contributions: [{ feature, transformedValue: contribution > 0 ? 1 : -1, contribution, component, reliability: 'core' }] }), neutral(over));
@@ -215,7 +252,7 @@ describe('reasons and explainability', () => {
     const suppressions = buildReasons(out(1, 0.1, { suppressions: suppressionCodes as PredictorOutput['suppressions'] }), neutral());
     expect(suppressions.map((reason) => reason.code)).toEqual(suppressionCodes);
     expect(suppressions.every((reason) => reason.polarity === 'suppresses' && reason.component === 'availability')).toBe(true);
-    expect(new Set([...cases.map((entry) => entry[2]), ...suppressionCodes]).size).toBe(28);
+    expect(new Set([...cases.map((entry) => entry[2]), ...suppressionCodes]).size).toBe(35);
   });
 
   it('uses exact fold wording boundaries and never calls a first-screen control below the viewport', () => {
@@ -239,7 +276,8 @@ describe('reasons and explainability', () => {
       { feature: 'fixed' as const, transformedValue: 1, contribution: W.REASON_MIN_CONTRIBUTION - 0.000001, component: 'context' as const, reliability: 'core' as const },
     ];
     const reasons = buildReasons(out(1, 0.3, { contributions }), neutral({ viewportsDown: 0.9 }));
-    expect(reasons.map((reason) => reason.code)).toEqual(['FIRST_VIEWPORT', 'CROWDED_REGION', 'FEW_COMPETING_CONTROLS', 'LOW_ON_FIRST_SCREEN', 'VISUALLY_ISOLATED']);
+    // peers (+0.02) and section density (-0.02) are one idea and cancel out: no competition reason.
+    expect(reasons.map((reason) => reason.code)).toEqual(['FIRST_VIEWPORT', 'LOW_ON_FIRST_SCREEN', 'VISUALLY_ISOLATED']);
     expect(reasons.every((reason) => Math.abs(reason.contribution) >= W.REASON_MIN_CONTRIBUTION)).toBe(true);
     const atThreshold = buildReasons(out(1, 0.3, { contributions: [{ feature: 'fixed', transformedValue: 1, contribution: W.REASON_MIN_CONTRIBUTION, component: 'context', reliability: 'core' }] }), neutral());
     expect(atThreshold.map((reason) => reason.code)).toEqual(['FIXED_POSITION']);
@@ -252,7 +290,7 @@ describe('result', () => {
     const r1 = predict(a, { createdAt: 1, predictionId: 'x', now: () => 0 });
     const r2 = predict(a, { createdAt: 1, predictionId: 'x', now: () => 0 });
     expect(r1).toEqual(r2);
-    expect(r1).toMatchObject({ predictorId: 'heuristic-v1', weightsVersion: 'weights-v1', featureSchema: 'features-v1', analysisId: a.meta.analysisId, layoutVersion: 1 });
+    expect(r1).toMatchObject({ predictorId: 'heuristic-v1', weightsVersion: 'weights-v2', featureSchema: 'features-v2', analysisId: a.meta.analysisId, layoutVersion: 1 });
     const s = r1.summary;
     expect(s.high + s.medium + s.low).toBe(s.assessed);
     expect(r1.elements).toHaveLength(s.assessed + s.notAssessed);

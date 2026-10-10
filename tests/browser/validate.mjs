@@ -68,7 +68,7 @@ try {
     const before = await h.request(tabId0, 'PING', null).catch((e) => ({ err: e.message }));
     const noPopup = !(await h.targets()).some((t) => t.url.includes('/popup/'));
     check('ui', 'toolbar icon opens the side panel directly; opening it does not inject', noPopup && !!before.err);
-    for (let i = 0; i < 30 && !(await panel.eval(`!!document.querySelector('[data-key="ov-predict"]')`)); i++) await sleep(100);
+    for (let i = 0; i < 30 && !(await panel.eval(`!!document.querySelector('[data-key="ov-start-predict"]')`)); i++) await sleep(100);
     const ptext = await panel.text();
     check('ui', 'side panel opens on Overview with no developer/debug UI', ptext.includes('Overview') && !/Developer details|Analysis JSON|Raw state|Run analyzer/.test(ptext));
   }
@@ -533,9 +533,8 @@ try {
       });
     });
     const panel = await h.triggerAction(page);
-    // Overview Record is an accordion: expand it (only if collapsed), then Start.
+    // Overview shows Record open: Start directly.
     const startRecord = async () => {
-      if ((await panel.eval(`document.querySelector('[data-key="ov-record"]')?.getAttribute('aria-expanded')`)) !== 'true') await panel.click('button[data-key="ov-record"]');
       for (let i = 0; i < 30 && !(await panel.eval(`!!document.querySelector('[data-key="ov-start-record"]:not(:disabled)')`)); i++) await sleep(100);
       await panel.click('button[data-key="ov-start-record"]');
     };
@@ -543,7 +542,7 @@ try {
     await startRecord();
     await sleep(3200);
     const bar0 = await liveText();
-    check('phase1', 'panel Record injects and records; recording bar shows elapsed', /Recording/.test(bar0) && /\b[23]s\b/.test(bar0), bar0.replace(/\n+/g, ' | '));
+    check('phase1', 'panel Record injects and records; recording bar shows elapsed', /Duration/.test(bar0) && /\b[23]s\b/.test(bar0), bar0.replace(/\n+/g, ' | '));
     let events = await h.sw.evaluate(() => globalThis.__events);
     const states = events.filter((e) => e.type === 'STATE_CHANGED').map((e) => e.state);
     const ticks = events.filter((e) => e.type === 'SESSION_TICK').length;
@@ -564,7 +563,7 @@ try {
     await startRecord();
     await sleep(1300);
     const bar = await liveText();
-    check('phase1', 'side panel Record + recording bar follows runtime', /Recording/.test(bar) && /\b[12]s\b/.test(bar), bar.replace(/\n+/g, ' | '));
+    check('phase1', 'side panel Record + recording bar follows runtime', /Duration/.test(bar) && /\b[12]s\b/.test(bar), bar.replace(/\n+/g, ' | '));
 
     // Repeated injection must not duplicate listeners/controllers.
     const tabId = await h.tabIdOf(page);
@@ -599,6 +598,130 @@ try {
     // Extension reload is not automated: chrome.runtime.reload() tears down the service worker the
     // harness drives Chrome through, which hangs Playwright. Covered by BUILD_ID reinjection
     // (pingBuild) in unit tests; verify manually after reloading the unpacked extension.
+  }
+
+  // -------------------------------------------------------------------------
+  if (want('predict')) {
+    console.log('\n== Predict: determinism, scroll/resize stability, explanations, timing ==');
+    const page = h.ctx.pages()[0];
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${origin}/landing.html`);
+    await h.triggerAction(page);
+    const tabId = await h.tabIdOf(page);
+    await h.inject(tabId);
+    const predictNow = async () => {
+      const run = await h.request(tabId, 'RUN_PREDICTION', { source: 'sidepanel' });
+      if (!run.res.ok) throw new Error(`predict: ${run.res.error?.code}`);
+      return (await h.request(tabId, 'GET_PREDICTION', null, 'query')).res.data;
+    };
+    const sig = (r) => r.elements.map((e) => `${e.id}:${e.band}:${e.confidence}:${e.topReasons.map((x) => x.code).join('+')}`).join('|');
+    const a = await predictNow();
+    const b = await predictNow();
+    const ids = a.elements.map((e) => e.id);
+    check('predict', 'two runs on an unchanged page give identical bands, confidence and reasons', sig(a) === sig(b));
+    check('predict', 'no duplicate predictions; band counts add up', new Set(ids).size === ids.length && a.summary.high + a.summary.medium + a.summary.low === a.summary.assessed, a.summary);
+    const assessed = a.elements.filter((e) => e.band !== 'not-assessed');
+    const confident = assessed.filter((e) => e.confidence === 'high').length;
+    check('predict', 'most controls are confidently banded on a clean fixture (no blanket uncertainty)', confident / assessed.length > 0.5, { confident, assessed: assessed.length });
+
+    // Details: reasons are backed by facts, polarities are consistent, no contradictory pairs.
+    let detailsOk = true;
+    const bad = [];
+    for (const e of assessed.slice(0, 12)) {
+      const d = (await h.request(tabId, 'GET_PREDICTION_DETAILS', { elementId: e.id }, 'query')).res.data;
+      const codes = d.reasons.map((x) => x.code);
+      const ok =
+        d.reasons.every((x) => x.polarity === 'suppresses' || Math.sign(x.contribution) === (x.polarity === 'raises' ? 1 : -1)) &&
+        !(codes.includes('LARGE_RELATIVE_SIZE') && codes.includes('SMALL_RELATIVE_SIZE')) &&
+        codes.filter((c) => ['FEW_COMPETING_CONTROLS', 'MANY_COMPETING_CONTROLS', 'CROWDED_REGION', 'NAV_CLUSTER'].includes(c)).length <= 1 &&
+        (!codes.includes('STRONG_CONTRAST') || d.facts.contrastRatio !== null) &&
+        (!codes.includes('TINY_TARGET') || d.facts.shortSide < 24);
+      if (!ok) bad.push({ id: e.id, codes });
+      detailsOk &&= ok;
+    }
+    check('predict', 'details: reasons match their facts and polarity, never contradict', detailsOk, bad.length ? bad : undefined);
+
+    // Scroll: document-relative analysis, so scrolling alone changes nothing.
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await sleep(200);
+    const scrolled = await predictNow();
+    check('predict', 'scrolling does not change bands, confidence or reasons', sig(scrolled) === sig(a));
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    // Resize: layout changes may change bands, but the result stays valid and deterministic.
+    await page.setViewportSize({ width: 900, height: 700 });
+    await sleep(300);
+    const r1 = await predictNow();
+    const r2 = await predictNow();
+    const rIds = r1.elements.map((e) => e.id);
+    check('predict', 'after resize: deterministic, no duplicates, counts add up', sig(r1) === sig(r2) && new Set(rIds).size === rIds.length && r1.summary.high + r1.summary.medium + r1.summary.low === r1.summary.assessed, r1.summary);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await sleep(300);
+    const back = await predictNow();
+    check('predict', 'restoring the size restores the original prediction', sig(back) === sig(a));
+    check('predict', 'prediction stages stay fast (features + predict + banding < 25 ms)', back.timings.featuresMs + back.timings.predictMs + back.timings.bandingMs < 25, back.timings);
+    await h.request(tabId, 'CLEAR_PREDICTION', null);
+  }
+
+  // -------------------------------------------------------------------------
+  if (want('record-layout')) {
+    console.log('\n== Record: "Layout changed" warning follows the live page both ways ==');
+    const page = h.ctx.pages()[0];
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${origin}/landing.html`);
+    await h.triggerAction(page);
+    const tabId = await h.tabIdOf(page);
+    await h.inject(tabId);
+    const getState = async () => (await h.request(tabId, 'GET_STATE', null, 'query')).res.data;
+    const waitFor = async (fn, ms = 4000) => {
+      for (let t = 0; t < ms; t += 100) {
+        const v = await fn();
+        if (v) return v;
+        await sleep(100);
+      }
+      return null;
+    };
+    const center = (id) => page.evaluate((id) => { const r = document.getElementById(id).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, id);
+    await h.request(tabId, 'START_SESSION', { source: 'sidepanel' });
+    await waitFor(async () => (await getState()).session.state === 'recording');
+    const b = await center('secondary');
+    for (let i = 0; i < 30; i++) {
+      await page.mouse.move(b.x + (i % 5) - 2, b.y + (i % 3) - 1);
+      await sleep(40);
+    }
+    await page.mouse.click(b.x, b.y);
+    await page.mouse.click(b.x, b.y);
+    await h.request(tabId, 'STOP_SESSION', null);
+    const ready = await waitFor(async () => { const s = await getState(); return s.session.state === 'ready' && s; });
+    const flag = async () => (await getState()).recorded?.layoutChanged;
+    const settled = (want) => waitFor(async () => (await flag()) === want, 2000);
+    const pageFlag = async () => (await h.request(tabId, 'GET_RECORDED_PAGE', { page: 0 }, 'query')).res.data?.layoutMayHaveChanged;
+    check('record-layout', 'right after Stop: no warning', !!ready && (await flag()) === false && (await pageFlag()) === false);
+
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await sleep(500);
+    check('record-layout', 'scrolling: no warning', (await flag()) === false);
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    await page.evaluate(() => { const d = document.createElement('div'); d.id = '__appended'; d.style.height = '2400px'; document.body.append(d); });
+    check('record-layout', 'content appended below (+height): no warning', (await settled(false)) && (await sleep(600), (await flag()) === false));
+
+    await page.evaluate(() => { const d = document.createElement('div'); d.id = '__banner'; d.style.height = '120px'; document.body.prepend(d); });
+    check('record-layout', 'banner inserted above the recorded controls: warning (page view agrees)', !!(await settled(true)) && (await pageFlag()) === true);
+
+    await page.evaluate(() => document.getElementById('__banner').remove());
+    check('record-layout', 'banner removed again: warning clears', !!(await settled(false)) && (await pageFlag()) === false);
+
+    await page.setViewportSize({ width: 900, height: 800 });
+    check('record-layout', 'material width change (zoom / window): warning', !!(await settled(true)));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    check('record-layout', 'width restored: warning clears', !!(await settled(false)));
+
+    await h.request(tabId, 'CLEAR_SESSION', null);
+    const cleared = await waitFor(async () => { const s = await getState(); return s.session.state === 'idle' && s.recorded === null && s; });
+    await page.evaluate(() => document.body.prepend(Object.assign(document.createElement('div'), { style: 'height:200px' })));
+    await sleep(500);
+    check('record-layout', 'Clear removes the result; later layout changes emit nothing', !!cleared && (await getState()).recorded === null);
   }
 } catch (e) {
   failures++;

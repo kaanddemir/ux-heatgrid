@@ -8,7 +8,7 @@
  */
 import type { ElementRef, Rect } from '../analyzer/types';
 
-export const FEATURE_SCHEMA = 'features-v1';
+export const FEATURE_SCHEMA = 'features-v2';
 
 export type Component = 'prominence' | 'competition' | 'availability' | 'context';
 export const COMPONENTS: readonly Component[] = ['prominence', 'competition', 'availability', 'context'];
@@ -22,7 +22,7 @@ export type LandmarkContext = 'header' | 'nav' | 'main' | 'footer' | 'aside' | '
 /** A feature value: a bounded number, or null when it could not be measured. Never silently 0. */
 export type FeatureValue = number | null;
 
-/** features-v1. All numeric values are bounded; see features.ts for exact definitions. */
+/** features-v2. All numeric values are bounded; see features.ts for exact definitions. */
 export interface PredictionFeatures {
   elementId: number;
   // Size
@@ -31,7 +31,7 @@ export interface PredictionFeatures {
   relSizeRegion: FeatureValue; // same vs region median; null with < 3 region peers
   relSize: FeatureValue; // scored size: mean of page and region scales when the region scale exists, else page
   shortSide: FeatureValue; // px
-  tinyTarget: FeatureValue; // 1 when short side < 24px (WCAG 2.2 target-size minimum), else 0
+  tinyTarget: FeatureValue; // 0 at ≥ 24px short side (WCAG 2.2 target-size minimum), ramping to 1 at the unusable 6px
   // Position
   firstViewportFraction: FeatureValue; // 0..1
   viewportsDown: FeatureValue; // top / viewport height, clamped to [0, 10]
@@ -152,13 +152,20 @@ export type RaiseReason =
   | 'STRONGEST_IN_GROUP'
   | 'UNIQUE_STYLE'
   | 'NEAR_HEADING'
-  | 'FIXED_POSITION';
+  | 'FIXED_POSITION'
+  | 'STICKY_POSITION'
+  | 'LARGER_TEXT'
+  | 'BOLD_TEXT'
+  | 'BUTTON_SHAPE';
 export type LowerReason =
   | 'LOW_ON_FIRST_SCREEN'
   | 'BELOW_FOLD'
   | 'FAR_DOWN_PAGE'
   | 'SMALL_RELATIVE_SIZE'
   | 'LOW_CONTRAST'
+  | 'SMALLER_TEXT'
+  | 'LIGHT_TEXT'
+  | 'TIGHT_SPACING'
   | 'MANY_COMPETING_CONTROLS'
   | 'CROWDED_REGION'
   | 'WEAKER_THAN_PEERS'
@@ -315,7 +322,27 @@ export interface PredictionElementDetails {
   element: PredictionSummaryElement;
   regionLabel: string | null;
   reasons: PredictionReason[];
-  /** Selected feature values the UI uses to phrase reasons (e.g. "6 nearby controls"). */
-  facts: { peersNearby: number | null; viewportsDown: number | null; heuristicDetection: boolean };
+  /** Measured values the UI uses to phrase reasons specifically (e.g. "6 nearby controls"). */
+  facts: ReasonFacts;
   components: Record<Component, ComponentDirection> | null;
+}
+
+/**
+ * Measured values behind the reasons, rounded for display. Every field is a measurement the score
+ * used; null when it was not measured. Never a score or a probability.
+ */
+export interface ReasonFacts {
+  peersNearby: number | null;
+  viewportsDown: number | null;
+  heuristicDetection: boolean;
+  /** Area relative to the page's median control (clamped to 1/8 … 8 like the size feature). */
+  sizeRatio: number | null;
+  /** Text contrast ratio; values ≥ 7 are reported as 7 (the feature saturates there). */
+  contrastRatio: number | null;
+  /** Shorter side in px. */
+  shortSide: number | null;
+  /** How many assessed controls share this control's filled/outlined style (itself included). */
+  styleShared: number | null;
+  bordered: boolean;
+  padded: boolean;
 }

@@ -1,5 +1,6 @@
-// Renders icon PNGs from the SVG masters with Playwright's Chromium.
-// Usage: PLAYWRIGHT_DIR=… CHROME_PATH=… node assets/brand/render-icons.mjs
+// Renders the extension icon PNGs (transparent background) from the SVG masters with Playwright's Chromium.
+// Writes icons/icon{16,32,48,128}.png and assets/brand/icon-512.png (used by the store artwork).
+// Usage: PLAYWRIGHT_DIR=… [CHROME_PATH=…] node assets/brand/render-icons.mjs
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,7 +13,7 @@ const small = fs.readFileSync(path.join(here, 'icon-16.svg'), 'utf8');
 // 32/48: the main mark without Chrome's 128-canvas padding (toolbar sizes need every pixel).
 const bleed = main.replace('viewBox="0 0 128 128"', 'viewBox="16 16 96 96"');
 const jobs = [[16, small], [32, bleed], [48, bleed], [128, main], [512, main]];
-const browser = await chromium.launch({ executablePath: process.env.CHROME_PATH });
+const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
 const page = await browser.newPage({ deviceScaleFactor: 1 });
 for (const [size, svg] of jobs) {
   const sized = svg.replace(/width="\d+" height="\d+"/, `width="${size}" height="${size}"`);

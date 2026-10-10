@@ -48,6 +48,29 @@ export function boundedText(el: Element, max = 400): string {
 }
 
 const VALUE_BEARING = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'OPTION']);
+/** Subtrees whose textContent can hold what the user typed or chose (a textarea's textContent is its value). */
+const EDITABLE = 'textarea, select, [contenteditable]';
+
+/**
+ * True when `el` sits inside editable content: an editing host above it (including the
+ * non-editable islands editors embed, e.g. mention chips) or a designMode document.
+ */
+function insideEditable(el: Element): boolean {
+  return el.ownerDocument?.designMode === 'on' || !!el.closest?.('[contenteditable]:not([contenteditable="false"])');
+}
+
+/** Text of a referenced label node, skipping any editable / form-field subtree inside or around it. */
+function labelText(node: Element): string {
+  if (VALUE_BEARING.has(node.tagName) || node.matches?.(EDITABLE) || insideEditable(node)) return '';
+  if (!node.querySelector?.(EDITABLE)) return node.textContent ?? '';
+  let out = '';
+  for (const child of Array.from(node.childNodes)) {
+    if (child.nodeType === 3) out += child.nodeValue ?? '';
+    else if (child.nodeType === 1) out += ` ${labelText(child as Element)} `;
+  }
+  return out;
+}
+
 const BUTTON_INPUT_TYPES: Record<string, string> = {
   submit: 'Submit',
   reset: 'Reset',
@@ -60,7 +83,7 @@ function textOfIds(el: Element, ids: string): string | undefined {
   const parts: string[] = [];
   for (const id of ids.split(/\s+/).filter(Boolean).slice(0, 4)) {
     const target = root.getElementById?.(id);
-    if (target && !VALUE_BEARING.has(target.tagName)) parts.push(target.textContent ?? '');
+    if (target) parts.push(labelText(target));
   }
   return parts.join(' ');
 }
@@ -69,7 +92,7 @@ function associatedLabel(el: Element): string | undefined {
   const labels = (el as HTMLInputElement).labels;
   if (labels && labels.length > 0) {
     // Label text can contain the control itself (wrapping label); textContent of an input is empty.
-    return Array.from(labels, (l) => l.textContent ?? '').join(' ');
+    return Array.from(labels, labelText).join(' ');
   }
   return undefined;
 }
@@ -99,12 +122,12 @@ export function readLabel(el: Element): string | undefined {
     if (tag === 'INPUT' && BUTTON_INPUT_TYPES[type]) return BUTTON_INPUT_TYPES[type];
     return normalizeLabel(el.getAttribute('placeholder'));
   }
-  if (el instanceof HTMLElement && el.isContentEditable) return 'Editable region';
+  if ((el instanceof HTMLElement && el.isContentEditable) || insideEditable(el)) return 'Editable region';
   const alt = normalizeLabel(el.getAttribute('alt'));
   if (alt) return alt;
   // Never take text from subtrees holding form fields (a textarea's textContent is its value).
   // textContent is bounded before normalizing so huge nodes don't cost a full string scan.
-  if (!el.querySelector?.('textarea, select, [contenteditable]')) {
+  if (!el.querySelector?.(EDITABLE)) {
     const text = normalizeLabel(boundedText(el, 400));
     if (text) return text;
   }

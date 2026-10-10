@@ -7,7 +7,7 @@
  */
 import { OVERLAY_TAG } from '../../shared/constants';
 
-/** Predicted: electric-blue accent family. Recorded: warm heat ramp (canvas) — the two never share colours. */
+/** Predicted: brand vermilion · sand · grey outlines. Recorded: warm heat ramp (canvas), drawn on a separate layer. */
 // No :host rule: for !important declarations the shadow tree's styles beat the page's (inline
 // included), so `:host { all: initial !important }` would reset the host's inline
 // `position: fixed !important` and let the boxes scroll with the document.
@@ -17,10 +17,10 @@ export const OVERLAY_CSS = `
 /* Overlay tokens (shadow DOM, isolated from the host page) — mirror tokens.css: outlines use the
    panel's light-theme band colours (they sit on page content); the near-black dock its dark ones. */
 .layer, .label {
-  --hg-dock: rgba(13, 15, 19, 0.9); --hg-dock-edge: rgba(255, 255, 255, 0.12);
+  --hg-dock: rgba(23, 23, 23, 0.9); --hg-dock-edge: rgba(255, 255, 255, 0.12);
   --hg-dock-text: rgba(255, 255, 255, 0.9); --hg-dock-muted: rgba(255, 255, 255, 0.7);
-  --hg-focus: #6fa0ff; --hg-pred: #397bfa;
-  --hg-high: #5b93ff; --hg-medium: #3cc4b0; --hg-low: #dca85c;
+  --hg-focus: #ededed; --hg-brand: #ef5446;
+  --hg-high: #ff7a6b; --hg-medium: #e0c3a5; --hg-low: #a3a3a3;
   --hg-motion-fast: 120ms; --hg-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 .layer, .layer * { pointer-events: none !important; box-sizing: border-box; }
@@ -31,15 +31,15 @@ export const OVERLAY_CSS = `
   box-shadow: 0 0 0 1px var(--band-contrast), 0 0 0 3px var(--band-halo);
 }
 .box[data-band="high"] {
-  --band: #2a6ae6; --band-fill: rgba(57, 123, 250, 0.14); --band-halo: rgba(57, 123, 250, 0.18); --band-contrast: rgba(255, 255, 255, 0.6);
+  --band: #d23b2e; --band-fill: rgba(239, 84, 70, 0.14); --band-halo: rgba(239, 84, 70, 0.18); --band-contrast: rgba(255, 255, 255, 0.6);
   border: 2px solid var(--band);
 }
 .box[data-band="medium"] {
-  --band: #0b8475; --band-fill: rgba(11, 132, 117, 0.08); --band-halo: rgba(11, 132, 117, 0.12); --band-contrast: rgba(255, 255, 255, 0.42);
+  --band: #9c7a55; --band-fill: rgba(156, 122, 85, 0.08); --band-halo: rgba(156, 122, 85, 0.12); --band-contrast: rgba(255, 255, 255, 0.42);
   border: 1.5px dashed var(--band);
 }
 .box[data-band="low"] {
-  --band: #c07d22; --band-fill: rgba(192, 125, 34, 0.06); --band-halo: rgba(192, 125, 34, 0.09); --band-contrast: rgba(255, 255, 255, 0.32);
+  --band: #868079; --band-fill: rgba(134, 128, 121, 0.06); --band-halo: rgba(134, 128, 121, 0.09); --band-contrast: rgba(255, 255, 255, 0.32);
   border: 1.5px dotted var(--band);
 }
 .layer[data-focus] .box:not([data-selected]) { opacity: 0.20; }
@@ -67,9 +67,9 @@ export const OVERLAY_CSS = `
   border-right: 1px solid var(--hg-dock-edge); font-weight: 650; color: #fff; white-space: nowrap;
 }
 .mark { width: 8px; height: 8px; border-radius: 2.5px; flex-shrink: 0; }
-.label[data-kind="predicted"] .mark { background: var(--hg-pred); }
+.label[data-kind="predicted"] .mark { background: var(--hg-brand); }
 .label[data-stale] .title { color: rgba(255, 255, 255, 0.62); }
-.label[data-stale] .mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hg-pred); }
+.label[data-stale] .mark { background: transparent; box-shadow: inset 0 0 0 1.5px var(--hg-brand); }
 .legend { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .key { display: inline-flex; align-items: center; gap: 5px; padding: 0 6px; white-space: nowrap; }
 .swatch { display: inline-block; width: 12px; height: 9px; border-radius: 3px; }
@@ -119,7 +119,7 @@ export const OVERLAY_CSS = `
 }
 `;
 
-/** Recorded Interaction: warm heat canvases and legend glyphs (never the Predicted blue). */
+/** Recorded Interaction: warm heat canvases and legend glyphs (outline-free, unlike Predicted bands). */
 export const RECORDED_CSS = `
 .canvas { position: fixed; left: 0; top: 0; display: block; }
 .label[data-kind="recorded"] .mark { background: linear-gradient(135deg, rgb(222, 73, 104), rgb(252, 211, 77)); }

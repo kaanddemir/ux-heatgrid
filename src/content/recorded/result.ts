@@ -10,7 +10,7 @@ export function toSessionView(r: RecordedSessionResult, selectedPage: number): R
     elapsedMs: r.elapsedMs,
     activeMs: r.activeMs,
     totals: { ...r.totals },
-    deepestScroll: single?.scrollMetrics.document ? round3(single.scrollMetrics.document.deepestFraction) : null,
+    deepestScroll: single ? scrollDepth(single) : null,
     pages: r.segments.map((p, position) => ({ position, path: p.pageIdentity.path, title: p.pageIdentity.title, clicks: p.facts.clicks + p.facts.activations, activeMs: p.facts.activeMs })),
     selectedPage,
     limitations: [...r.limitations],
@@ -19,6 +19,17 @@ export function toSessionView(r: RecordedSessionResult, selectedPage: number): R
 }
 
 const round3 = (v: number): number => Math.round(v * 1000) / 1000;
+
+/**
+ * Deepest point of the page that was on screen, as a share of its height (the first screen
+ * counts). null when the page never needed scrolling: "100%" would claim scrolling that cannot
+ * have happened.
+ */
+export function scrollDepth(p: Pick<RecordedPageResult, 'scrollMetrics'>): number | null {
+  const d = p.scrollMetrics.document;
+  if (!d || d.scrollHeight <= d.clientHeight + 1) return null;
+  return round3(d.deepestFraction);
+}
 
 export function toPageView(
   p: RecordedPageResult,
@@ -34,7 +45,7 @@ export function toPageView(
     ...live,
     facts: {
       ...p.facts,
-      deepestScroll: p.scrollMetrics.document ? round3(p.scrollMetrics.document.deepestFraction) : null,
+      deepestScroll: scrollDepth(p),
       nestedScroll: p.scrollMetrics.nested.map((n) => ({ rootId: n.rootId, label: null, deepestFraction: round3(n.deepestFraction) })),
     },
     lists: p.lists,

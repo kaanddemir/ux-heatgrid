@@ -11,7 +11,9 @@ import { el } from '../shared/render';
 import { formatDuration } from './model';
 import { actions, button, detail, detailPart, emptyState, filterPopover, footer, group, inspectorRow, loadingState, more, popoverGroup, statGrid, summary, switchRow, toggle, type NoticeIssue } from './ui';
 import { icon } from '../shared/icons';
-import { LAYOUT_COPY, LIST_COPY, NOT_LIVE_COPY, NOT_OPEN_COPY, RECORDED_LIMITATION_COPY, detailFacts, itemLabel, percent, shortMeta } from '../shared/recordedCopy';
+import { LAYOUT_COPY, LIST_COPY, SCROLL_HINT, NOT_LIVE_COPY, NOT_OPEN_COPY, RECORD_DESC, RECORDED_LIMITATION_COPY, detailFacts, itemLabel, percent } from '../shared/recordedCopy';
+import { cleanSubject } from '../shared/regionLabel';
+import { elementType } from './viewModel';
 
 export interface RecordedViewModel {
   snap: TabSnapshot | null;
@@ -55,12 +57,17 @@ const ACTIVE: readonly SessionState[] = ['preparing', 'recording', 'processing']
 /** Head actions. Completed: Re-run (record again) · Show on page · Filter. Live: Stop. */
 export function recordedHeadAction(m: RecordedViewModel, h: RecordedHandlers): HTMLElement | null {
   const state = m.snap?.session.state ?? 'idle';
-  if (ACTIVE.includes(state)) return actions(stopButton(state, m.busy, h.onStop));
+  if (ACTIVE.includes(state)) return actions(pagesChip(state === 'recording' ? (m.snap?.session.recording?.segmentCount ?? 1) : 1), stopButton(state, m.busy, h.onStop));
   const p = m.page;
   if (!m.session || state !== 'ready' || !p) return null;
   const show = toggle('Show on page', m.snap?.interactionView === 'recorded' && p.pageOpen, !m.busy && p.pageOpen, h.onShowOnPage, 'rec-show', 'eye');
   if (!p.pageOpen) show.title = NOT_OPEN_COPY;
   return actions(show, recordedFilters(m, p, h));
+}
+
+/** Page count of a multi-page recording, as a quiet box beside Stop; nothing for one page. */
+export function pagesChip(pages: number): HTMLElement | null {
+  return pages > 1 ? el('span', { class: 'chip', attrs: { role: 'status' }, text: `${pages} pages` }) : null;
 }
 
 /** The one Stop control (Overview Record panel and Record head). */
@@ -76,11 +83,10 @@ export function recordedWarnings(m: RecordedViewModel, h?: Pick<RecordedHandlers
   const ignored = new Set(['SHORT_SESSION', 'LITTLE_SCROLL', 'FEW_EVENTS']);
   const limitations = [...new Set([...(m.session?.limitations ?? []), ...(p?.limitations ?? [])])].filter((code) => !ignored.has(code));
   const issues: Array<NoticeIssue | null> = [
-    state === 'error' ? { id: 'recording-failed', severity: 'critical', message: 'Recording could not be processed', detail: 'Start a new recording to try again.', action: h ? button('Start recording', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'recording-recover', subtle: true }) : null } : null,
     p && !p.pageOpen ? { id: 'recording-page-not-open', severity: 'action', message: NOT_OPEN_COPY } : null,
     p?.pageOpen && !p.elementsLive ? { id: 'recording-elements-not-live', severity: 'warning', message: NOT_LIVE_COPY } : null,
     p?.layoutMayHaveChanged
-      ? { id: 'recording-page-changed', severity: 'action', message: LAYOUT_COPY, detail: 'The map may not line up with the page.', action: h ? button('Record again', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'record-again-layout', subtle: true }) : null }
+      ? { id: 'recording-page-changed', severity: 'action', message: LAYOUT_COPY, action: h ? button('Record again', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'record-again-layout', subtle: true }) : null }
       : null,
     m.note ? { id: 'recording-note', severity: 'info', message: m.note } : null,
     ...limitations.map((code): NoticeIssue => ({
@@ -108,7 +114,8 @@ export function recordedBody(m: RecordedViewModel, h: RecordedHandlers): HTMLEle
         el('span'),
         actions(
           button('Clear recording', h.onClear, !m.busy, { key: 'rec-clear', danger: true, icon: 'trash' }),
-          button('Record again', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'rec-rerun', icon: 'refresh', label: 'Record again (replaces this recording)' }),
+          // When the layout warning above carries "Record again", one re-record affordance is enough.
+          p?.layoutMayHaveChanged ? null : button('Record again', h.onRecord, (m.canRun ?? true) && !m.busy, { key: 'rec-rerun', icon: 'refresh', label: 'Record again (replaces this recording)' }),
         ),
       ),
     ].filter((n): n is HTMLElement => !!n),
@@ -121,7 +128,7 @@ function emptyBody(state: SessionState, m: RecordedViewModel, h: RecordedHandler
   if (state === 'processing') return loadingState('Processing recording…');
   if (state === 'recording' || state === 'preparing') return loadingState('Recording…');
   if (state === 'error') return emptyState('Recording could not be processed', 'Start a new one to try again.', button('Start recording', h.onRecord, (m.canRun ?? true) && !m.busy, { primary: true, key: 'rec-start', icon: 'record' }), 'warn', 'warn');
-  return emptyState('No recording yet', 'Capture a live session.', button('Start recording', h.onRecord, (m.canRun ?? true) && !m.busy, { primary: true, key: 'rec-start', icon: 'record' }), 'record');
+  return emptyState('No recording yet', RECORD_DESC, button('Start recording', h.onRecord, (m.canRun ?? true) && !m.busy, { primary: true, key: 'rec-start', icon: 'record' }), 'record');
 }
 
 /** Record summary: Duration · Clicks · Scroll (Pages for multi-page sessions) · Interacted. Shared with Overview. */
@@ -134,11 +141,18 @@ export function recordingSummary(s: RecordedSessionView, p: RecordedPageView | n
     [
       { label: 'Duration', value: formatDuration(s.elapsedMs) },
       { label: 'Clicks', value: String(clicks), quiet: !clicks },
-      multi ? { label: 'Pages', value: String(s.pages.length) } : { label: 'Scroll', value: percent(s.deepestScroll), quiet: s.deepestScroll === null },
+      multi ? { label: 'Pages', value: String(s.pages.length) } : { label: 'Scroll', value: percent(s.deepestScroll), quiet: s.deepestScroll === null, hint: SCROLL_HINT },
       { label: 'Interacted', value: String(interacted), quiet: !interacted },
     ],
     { key: 'rec-summary' },
   );
+}
+
+/** A readable page name: its title, else its path ("/" reads as Home). */
+export function pageName(pg: { path: string; title: string }): string {
+  const title = pg.title.trim();
+  if (title) return title;
+  return !pg.path || pg.path === '/' ? 'Home' : pg.path;
 }
 
 /** Multi-page: page selector + that page's facts on one quiet line (no second metric strip). */
@@ -147,7 +161,7 @@ function pageContext(s: RecordedSessionView, p: RecordedPageView | null, current
     'select',
     { attrs: { 'aria-label': 'Recorded page' }, on: { change: (e) => h.onPage(Number((e.target as HTMLSelectElement).value)) } },
     ...s.pages.map((pg) => {
-      const o = el('option', { text: `Page ${pg.position + 1} of ${s.pages.length} · ${pg.path || '/'}` });
+      const o = el('option', { text: `Page ${pg.position + 1} of ${s.pages.length}: ${pageName(pg)}` });
       o.value = String(pg.position);
       o.selected = pg.position === current;
       return o;
@@ -156,10 +170,16 @@ function pageContext(s: RecordedSessionView, p: RecordedPageView | null, current
   select.disabled = busy;
   select.dataset.key = 'rec-page';
   const f = p?.facts;
-  const line = f
-    ? [formatDuration(f.elapsedMs), `${f.clicks + f.activations} click${f.clicks + f.activations === 1 ? '' : 's'}`, `${percent(f.deepestScroll)} scroll`, `${f.controlsInteracted} interacted`].join(' · ')
+  // This page's facts as a row of quiet boxes (same style as the page count beside Stop).
+  const facts = f
+    ? [formatDuration(f.elapsedMs), `${f.clicks + f.activations} Click${f.clicks + f.activations === 1 ? '' : 's'}`, f.deepestScroll === null ? 'No Scroll' : `${percent(f.deepestScroll)} Scroll`, `${f.controlsInteracted} Interacted`]
     : null;
-  return el('div', { class: 'page-context' }, el('label', { class: 'select' }, icon('pages'), select, icon('chevron', 'icon select-chev')), line ? el('p', { class: 'caption', text: line }) : null);
+  return el(
+    'div',
+    { class: 'page-context' },
+    el('label', { class: 'select' }, icon('pages'), select, icon('chevron', 'icon select-chev')),
+    facts ? el('ul', { class: 'chips', attrs: { 'aria-label': 'This page' } }, ...facts.map((t) => el('li', { class: 'chip', text: t }))) : null,
+  );
 }
 
 function activityGroups(m: RecordedViewModel, p: RecordedPageView, h: RecordedHandlers): HTMLElement {
@@ -211,8 +231,9 @@ function activityRow(m: RecordedViewModel, p: RecordedPageView, key: ListKey, i:
   return inspectorRow({
     id,
     key: id,
-    label: itemLabel(i),
-    meta: shortMeta(i, key),
+    // Same row as Predict: clean name · element type · arrow. Activity lives in the expanded detail.
+    label: cleanSubject(itemLabel(i)),
+    meta: elementType(i.tagName, i.role) ?? '',
     selected,
     onToggle: () => h.onSelect(i.elementRef),
     eye: selected && p.elementsLive ? { on: focused, enabled: !m.busy, key: `rec-show-${i.elementRef}`, onClick: () => (focused && h.onClearFocus ? h.onClearFocus() : h.onFocus(i.elementRef)) } : null,
@@ -222,5 +243,5 @@ function activityRow(m: RecordedViewModel, p: RecordedPageView, key: ListKey, i:
 
 function activityDetail(p: RecordedPageView, i: RecordedListItem): HTMLElement {
   const caveat = p.elementsLive ? null : p.pageOpen ? 'Can’t be outlined for this part of the recording' : 'Open the original page to outline it';
-  return detail(`Recorded facts: ${itemLabel(i)}`, statGrid('Activity', detailFacts(i)), caveat ? detailPart('Caveats', el('ul', { class: 'caveats' }, el('li', { text: caveat }))) : null);
+  return detail(`Recorded facts: ${cleanSubject(itemLabel(i))}`, statGrid('Activity', detailFacts(i)), caveat ? detailPart('Caveats', el('ul', { class: 'caveats' }, el('li', { text: caveat }))) : null);
 }

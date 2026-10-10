@@ -1,5 +1,5 @@
 /**
- * Predict mode of the inspector. Electric-blue accent, never heat. Bands only — raw scores never leave
+ * Predict mode of the inspector. Brand accent, never the heat ramp. Bands only — raw scores never leave
  * the runtime, and High / Medium / Low are relative structural assessments of this page, not
  * probabilities. Layout is the shared inspector frame (see ui.ts).
  */
@@ -7,8 +7,7 @@ import type { PredictionCounts, PredictionSnapshot, TabSnapshot } from '../../sh
 import type { PredictionElementDetails, PredictionSummaryElement, PredictionSummaryResult } from '../../content/prediction/types';
 import { el } from '../shared/render';
 import { icon } from '../shared/icons';
-import { BAND_COPY, CAVEAT_COPY, PREDICTED_EMPTY, confidenceQualifier, reasonText } from '../shared/predictionCopy';
-import { meaningfulRegion } from '../shared/regionLabel';
+import { BAND_COPY, CAVEAT_COPY, CONFIDENCE_HELP, PREDICTED_EMPTY, confidenceQualifier, reasonDetail } from '../shared/predictionCopy';
 import { KIND_COPY, LISTED_BANDS, groupByBand, matchesKind, predictedViewState, rowModel, type Filter, type KindFilter } from './viewModel';
 import { actions, button, detail, detailPart, emptyState, filterGroup, filterPopover, footer, group, inspectorRow, loadingState, more, statGrid, summary, toggle, type NoticeIssue } from './ui';
 
@@ -64,8 +63,7 @@ export function predictedHeadAction(m: PredictedModel, h: PredictedHandlers): HT
 export function predictedWarnings(m: PredictedModel, h: PredictedHandlers): NoticeIssue[] {
   const v = predictedViewState(m.snap?.prediction as PredictionSnapshot | undefined);
   const issues: Array<NoticeIssue | null> = [
-    v.kind === 'stale' ? { id: 'prediction-stale', severity: 'action' as const, message: v.notice, detail: 'This prediction may no longer match the page.', action: button('Run again', h.onRun, m.canRun && !m.busy, { key: 'predict-again', subtle: true }) } : null,
-    v.kind === 'error' ? { id: 'prediction-failed', severity: 'critical' as const, message: v.message } : null,
+    v.kind === 'stale' ? { id: 'prediction-stale', severity: 'action' as const, message: v.notice, action: button('Run again', h.onRun, m.canRun && !m.busy, { key: 'predict-again', subtle: true }) } : null,
     m.focusNote ? { id: 'prediction-focus', severity: 'info' as const, message: m.focusNote } : null,
   ];
   return issues.filter((issue): issue is NoticeIssue => !!issue);
@@ -178,16 +176,21 @@ function resultDetail(r: PredictionSummaryResult, e: PredictionSummaryElement, m
   const raises = d.reasons.filter((x) => x.polarity === 'raises');
   const lowers = d.reasons.filter((x) => x.polarity !== 'raises');
   const reason = (x: (typeof raises)[number], dir: 'raises' | 'lowers'): HTMLElement =>
-    el('li', { attrs: { 'data-dir': dir } }, el('span', { class: 'sr-only', text: dir === 'raises' ? 'Raises: ' : 'Lowers: ' }), icon(dir === 'raises' ? 'up' : 'down', 'icon dir'), el('span', { text: reasonText(x.code, d.facts) }));
+    el('li', { attrs: { 'data-dir': dir } }, icon(dir === 'raises' ? 'up' : 'down', 'icon dir'), el('span', { text: reasonDetail(x.code, d.facts) }));
+  // Two columns, side by side: Positive (raises prominence) | Negative (lowers it). Each column is
+  // its own list, so unequal counts never leave empty rows; a missing side is simply not drawn.
+  const column = (dir: 'raises' | 'lowers', items: typeof raises): HTMLElement | null => {
+    const head = dir === 'raises' ? 'Positive' : 'Negative';
+    return items.length ? el('div', { class: 'why-col', attrs: { 'data-dir': dir } }, el('p', { class: 'why-head', text: head }), el('ul', { class: 'reasons', attrs: { 'aria-label': `${head} factors` } }, ...items.map((x) => reason(x, dir)))) : null;
+  };
   // Confidence already has its own cell in the grid; Caveats lists only the specific uncertainties.
   const caveats = d.element.caveats.map((c) => CAVEAT_COPY[c]);
-  if (m.snap?.prediction.state === 'stale') caveats.unshift('Page changed — these reasons describe the earlier analysis');
+  if (m.snap?.prediction.state === 'stale') caveats.unshift('Reasons are from before the page changed');
   const rm = rowModel(r, e);
-  const area = meaningfulRegion(d.regionLabel) ?? rm.area;
   return detail(
     `Why this prediction: ${name}`,
-    statGrid('Structure', [['Band', BAND_COPY[e.band]], ['Type', rm.type], area ? ['Area', area] : null, e.confidence ? ['Confidence', CONFIDENCE_COPY[e.confidence]] : null]),
-    detailPart('Why', raises.length || lowers.length ? el('ul', { class: 'reasons' }, ...raises.map((x) => reason(x, 'raises')), ...lowers.map((x) => reason(x, 'lowers'))) : el('p', { class: 'meta', text: 'Typical for this page.' })),
+    statGrid('Structure', [['Band', BAND_COPY[e.band]], ['Type', rm.type], e.confidence ? ['Confidence', CONFIDENCE_COPY[e.confidence], CONFIDENCE_HELP] : null]),
+    detailPart('Why', raises.length || lowers.length ? el('div', { class: lowers.length && raises.length ? 'why' : 'why is-single' }, column('raises', raises), column('lowers', lowers)) : el('p', { class: 'meta', text: 'Typical for this page.' })),
     caveats.length ? detailPart('Caveats', el('ul', { class: 'caveats' }, ...caveats.map((t) => el('li', { text: t })))) : null,
   );
 }

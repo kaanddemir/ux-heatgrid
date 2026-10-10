@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { toElementDetails, toSummaryResult } from '../../src/content/prediction/summary';
 import type { CaveatCode, ReasonCode } from '../../src/content/prediction/types';
 import type { PredictionSnapshot } from '../../src/shared/model';
-import { CAVEAT_COPY, confidenceQualifier, reasonText } from '../../src/ui/shared/predictionCopy';
+import { CAVEAT_COPY, CONFIDENCE_HELP, confidenceQualifier, reasonDetail, reasonText } from '../../src/ui/shared/predictionCopy';
 import { groupByBand, predictedViewState, rowModel } from '../../src/ui/sidepanel/viewModel';
 import { meaningfulRegion } from '../../src/ui/shared/regionLabel';
 import { pages } from '../fixtures/predictionPages';
@@ -25,7 +25,7 @@ describe('Predict tab view states', () => {
     expect(predictedViewState(snap('idle'))).toEqual({ kind: 'empty', action: 'Predict' });
     expect(predictedViewState(snap('analyzing')).kind).toBe('analyzing');
     expect(predictedViewState(snap('ready'))).toEqual({ kind: 'ready', action: 'Re-run prediction' });
-    expect(predictedViewState(snap('stale'))).toEqual({ kind: 'stale', action: 'Run again', notice: 'Page changed' });
+    expect(predictedViewState(snap('stale'))).toEqual({ kind: 'stale', action: 'Run again', notice: 'Page changed since this prediction.' });
     const err = predictedViewState(snap('error'));
     expect(err.kind === 'error' && err.action).toBe('Try again');
   });
@@ -79,23 +79,40 @@ describe('copy', () => {
       'STRONGEST_IN_GROUP', 'UNIQUE_STYLE', 'NEAR_HEADING', 'FIXED_POSITION', 'LOW_ON_FIRST_SCREEN', 'BELOW_FOLD', 'FAR_DOWN_PAGE', 'SMALL_RELATIVE_SIZE',
       'LOW_CONTRAST', 'MANY_COMPETING_CONTROLS', 'CROWDED_REGION', 'WEAKER_THAN_PEERS', 'NAV_CLUSTER', 'FOOTER_CONTEXT', 'TINY_TARGET',
       'PARTLY_CLIPPED', 'REDUCED_OPACITY', 'HEURISTIC_CONTROL', 'DISABLED', 'NOT_RENDERED', 'NEAR_INVISIBLE', 'UNUSABLE_GEOMETRY',
+      'STICKY_POSITION', 'LARGER_TEXT', 'BOLD_TEXT', 'BUTTON_SHAPE', 'SMALLER_TEXT', 'LIGHT_TEXT', 'TIGHT_SPACING',
     ];
     const texts = [...reasons.map((r) => reasonText(r)), ...Object.values(CAVEAT_COPY)];
-    expect(new Set(reasons).size).toBe(28);
+    expect(new Set(reasons).size).toBe(35);
     for (const t of texts) {
       expect(t.length).toBeGreaterThan(3);
       expect(t).not.toMatch(/probab|attention|gaze|%|\bAI\b|heat|\bshould\b|\bconsider\b|\btry\b/i);
     }
+    // Full sentences: still no probability, gaze or advice language. "Attention" only ever in the
+    // sense of visual competition between controls, never as a measured or predicted quantity.
+    const details = reasons.flatMap((r) => [reasonDetail(r), reasonDetail(r, { peersNearby: 3, viewportsDown: 4, heuristicDetection: false, sizeRatio: 3, contrastRatio: 4.2, shortSide: 18, styleShared: 2, bordered: true, padded: true })]);
+    for (const t of details) {
+      expect(t).toMatch(/^[A-Z0-9].*\.$/);
+      expect(t).not.toMatch(/probab|gaze|%|\bAI\b|heat|\bshould\b|\bconsider\b|\btry\b|[\u2013\u2014]/i);
+      if (/attention/i.test(t)) expect(t).toMatch(/compete for attention|competes for attention/);
+    }
+    expect(new Set(details).size).toBeGreaterThan(reasons.length); // facts make sentences specific
+    expect(CONFIDENCE_HELP).toMatch(/not how prominent/i);
     expect(Object.keys(CAVEAT_COPY).sort()).toEqual(
       (['CONTRAST_UNRESOLVED', 'HEURISTIC_DETECTION', 'WEAK_REGION', 'STICKY_AMBIGUOUS', 'CLIP_UNCERTAIN', 'ANALYSIS_CAPPED', 'NEAR_BAND_BOUNDARY', 'CONTRADICTORY_EVIDENCE'] as CaveatCode[]).sort(),
     );
   });
 
-  it('details facts make copy specific', () => {
+  it('details facts make copy specific and match the measured element', () => {
     const { result } = predictPage(pages.denseNav);
-    const d = toElementDetails(result, el(result, 'n-20').elementRef.id)!;
-    expect(reasonText('MANY_COMPETING_CONTROLS', d.facts)).toMatch(/^Competes with \d+ nearby controls$/);
+    const n = el(result, 'n-20');
+    const d = toElementDetails(result, n.elementRef.id)!;
+    expect(d.reasons.map((r) => r.code)).toContain('NAV_CLUSTER');
+    expect(reasonDetail('NAV_CLUSTER', d.facts)).toBe(`One of ${n.features!.peersNearby! + 1} similar navigation items close together, so no single one stands out.`);
     expect(reasonText('MANY_COMPETING_CONTROLS')).toBe('Many controls nearby');
+    const cta = toElementDetails(predictPage(pages.landing).result, el(predictPage(pages.landing).result, 'cta').elementRef.id)!;
+    expect(cta.facts.sizeRatio).toBeGreaterThan(1.5);
+    expect(reasonDetail('LARGE_RELATIVE_SIZE', cta.facts)).toMatch(/^Larger than a typical control on this page \((about [\d.]+×|8 or more times) the area\)/);
+    expect(reasonDetail('STRONG_CONTRAST', cta.facts)).toMatch(/\((about \d+\.\d:1|7:1 or more)\)/);
   });
 
   it('phrases relative and contextual evidence no more strongly than it was measured', () => {

@@ -104,3 +104,57 @@ describe('label text (Phase 9 real-site finding)', () => {
   });
 
 });
+
+describe('privacy: labels never carry text typed into editable regions', () => {
+  it('aria-labelledby and <label> skip contenteditable / form-field text', () => {
+    document.body.innerHTML = `
+      <div id="ed" contenteditable="true">secret typed text</div>
+      <button id="b1" aria-labelledby="ed">x</button>
+      <div id="wrap"><span>Notes</span><div contenteditable="true">secret draft</div></div>
+      <button id="b2" aria-labelledby="wrap">x</button>
+      <label>Bio <div contenteditable="true">secret bio</div><input id="i1" /></label>`;
+    for (const id of ['b1', 'b2', 'i1']) {
+      expect(readLabel(document.getElementById(id)!) ?? '').not.toContain('secret');
+    }
+  });
+});
+
+describe('privacy: wrapping labels keep their own text', () => {
+  it('names a select / editable-adjacent field from the label text only', () => {
+    document.body.innerHTML = `
+      <label>Country <select id="s"><option>Turkey</option></select></label>
+      <div id="lb">Notes <div contenteditable="true">secret</div></div><button id="b" aria-labelledby="lb">x</button>`;
+    expect(readLabel(document.getElementById('s')!)).toBe('Country');
+    expect(readLabel(document.getElementById('b')!)).toBe('Notes');
+  });
+});
+
+describe('privacy: text inside an editing host never becomes a label', () => {
+  it('aria-labelledby into editor content, and controls in non-editable islands of an editor', () => {
+    document.body.innerHTML = `
+      <div contenteditable="true"><p id="p1">secret one</p>
+        <span contenteditable="false"><a id="chip" href="/u">@secret three</a></span></div>
+      <button id="b1" aria-labelledby="p1">x</button>
+      <span id="who">Reply</span><div contenteditable="plaintext-only"><span id="draft">secret two</span></div>
+      <button id="b2" aria-labelledby="who draft">x</button>`;
+    for (const id of ['b1', 'b2', 'chip']) {
+      expect(readLabel(document.getElementById(id)!) ?? '').not.toContain('secret');
+    }
+    expect(readLabel(document.getElementById('b2')!)).toBe('Reply');
+  });
+
+  it('a designMode document is editable everywhere', () => {
+    document.body.innerHTML = `<p id="p">secret</p><button id="b" aria-labelledby="p">x</button>`;
+    document.designMode = 'on';
+    try {
+      expect(readLabel(document.getElementById('b')!) ?? '').not.toContain('secret');
+    } finally {
+      document.designMode = 'off';
+    }
+  });
+
+  it('contenteditable="false" outside any editor keeps its own text', () => {
+    document.body.innerHTML = `<div contenteditable="false"><button id="b">Save</button></div>`;
+    expect(readLabel(document.getElementById('b')!)).toBe('Save');
+  });
+});

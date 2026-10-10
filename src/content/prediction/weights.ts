@@ -1,5 +1,5 @@
 /**
- * weights-v1 — every weight, budget and threshold of heuristic-v1 lives here.
+ * weights-v2 — every weight, budget and threshold of heuristic-v1 lives here.
  *
  * These are HEURISTIC values chosen from structural design assumptions and checked against
  * fixtures. They are not fitted to behavioural data and are not scientifically validated.
@@ -8,7 +8,7 @@
  * clamped to [0, 1]. Budgets are what guarantee "no single signal creates High":
  * HIGH_FLOOR - BASE = 0.32, and no single sub-budget below exceeds 0.22.
  */
-export const WEIGHTS_VERSION = 'weights-v1';
+export const WEIGHTS_VERSION = 'weights-v2';
 
 export const W = {
   /** Neutral starting point for an eligible control. */
@@ -82,7 +82,12 @@ export const W = {
   COMPETITION_BUDGET: { min: -0.25, max: 0.12 },
 
   // ---------------------------------------------------------------- Availability (penalties only)
-  /** Below the 24px target-size minimum: harder to operate, less likely to read as a primary control. */
+  /**
+   * Below the 24px target-size minimum: harder to operate, less likely to read as a primary control.
+   * Ramped, not a step: full penalty at UNUSABLE_SHORT_SIDE, none at TINY_SHORT_SIDE. A step made a
+   * 23px and a 24px control differ by as much as being above the fold, and hit almost every text
+   * link (whose smallness relSize already measures).
+   */
   tinyTarget: 0.12,
   /** Part of the control is clipped away by an ancestor. */
   clipLoss: 0.1,
@@ -148,12 +153,18 @@ export const W = {
   // ---------------------------------------------------------------- Reasons / confidence
   /** Contributions smaller than this are not reported as reasons. */
   REASON_MIN_CONTRIBUTION: 0.015,
-  /** Within this distance of a band threshold → NEAR_BAND_BOUNDARY. */
+  /**
+   * Within this distance of a band threshold that actually applies to the element → NEAR_BAND_BOUNDARY.
+   * Also the assumed imprecision of the hand-set weights themselves.
+   */
   BOUNDARY_EPSILON: 0.03,
   /** Strong prominence with strong competition counts as contradictory evidence. */
   CONTRADICTION_PROMINENCE: 0.25,
   CONTRADICTION_COMPETITION: -0.15,
-  /** Caveat count thresholds: ≤ 0 → high, ≤ 2 → medium, otherwise low. */
-  CONFIDENCE_MEDIUM_AT: 1,
-  CONFIDENCE_LOW_AT: 3,
+  /**
+   * Confidence = how stable the band is against what could not be measured (engine.ts). Each caveat
+   * maps to the largest score change it could hide; CONTRADICTORY_EVIDENCE stands for the weight
+   * trade-off between prominence and competition, which is a judgment call.
+   */
+  CONTRADICTION_SWING: 0.04,
 } as const;

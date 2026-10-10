@@ -1,5 +1,5 @@
 /**
- * Feature extraction (features-v1). Pure: reads only a FullAnalysisResult — no DOM access,
+ * Feature extraction (features-v2). Pure: reads only a FullAnalysisResult — no DOM access,
  * no second page scan. Converts measured facts into bounded, page-/region-relative features.
  *
  * Normalization rules:
@@ -195,7 +195,7 @@ export function extractFeatures(analysis: FullAnalysisResult): ExtractedFeatures
           ? round((logRatio(g.area, pageMedianArea, 3) + logRatio(g.area, regionRef, 3)) / 2)
           : round(logRatio(g.area, pageMedianArea, 3)),
       shortSide: round(shortSide),
-      tinyTarget: shortSide < W.TINY_SHORT_SIDE ? 1 : 0,
+      tinyTarget: round(clamp((W.TINY_SHORT_SIDE - shortSide) / (W.TINY_SHORT_SIDE - W.UNUSABLE_SHORT_SIDE), 0, 1)),
       firstViewportFraction: g.firstScreenFraction,
       viewportsDown: round(viewportsDown),
       docYPercentile: round(percentile(rect.y, ys)),

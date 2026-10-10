@@ -38,12 +38,12 @@ export function mount(root: Element, ...children: Child[]): void {
 }
 
 const ERROR_COPY: Record<ErrorCode, string> = {
-  RESTRICTED_PAGE: "UX HeatGrid can't run on this page.",
-  NO_PERMISSION: 'Click the UX HeatGrid toolbar icon on this page, then try again.',
-  NOT_INJECTED: 'UX HeatGrid is not running on this page yet.',
-  INVALID_STATE: "That action isn't available right now.",
-  INVALID_MESSAGE: 'Something went wrong talking to the page.',
-  INTERNAL: 'Something went wrong. Reload the page and try again.',
+  RESTRICTED_PAGE: 'Not available on this page.',
+  NO_PERMISSION: 'Click the toolbar icon, then try again.',
+  NOT_INJECTED: 'Reload the page.',
+  INVALID_STATE: 'Not available right now.',
+  INVALID_MESSAGE: 'Something went wrong. Reload the page.',
+  INTERNAL: 'Something went wrong. Reload the page.',
 };
 
 export function errorText(error: HeatGridError): string {

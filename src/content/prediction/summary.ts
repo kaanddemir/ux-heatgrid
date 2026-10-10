@@ -11,6 +11,8 @@ import type {
   PredictionResult,
   PredictionSummaryElement,
   PredictionSummaryResult,
+  PredictionFeatures,
+  ReasonFacts,
 } from './types';
 import { COMPONENTS } from './types';
 
@@ -63,6 +65,25 @@ export function directionOf(value: number): ComponentDirection {
   return 'neutral';
 }
 
+const round1 = (v: number): number => Math.round(v * 10) / 10;
+
+/** Display facts behind the reasons — inverted from the bounded features, never new measurements. */
+export function reasonFacts(f: PredictionFeatures | null): ReasonFacts {
+  return {
+    peersNearby: f?.peersNearby ?? null,
+    viewportsDown: f?.viewportsDown ?? null,
+    heuristicDetection: f?.heuristicDetection === 1,
+    // relSizePage = log2(area / median) / 3, so the ratio is recoverable up to the ±3 clamp.
+    sizeRatio: f?.relSizePage != null ? round1(2 ** (f.relSizePage * 3)) : null,
+    // contrast = log(ratio) / log(7), saturating at 7:1.
+    contrastRatio: f?.contrast != null ? round1(7 ** f.contrast) : null,
+    shortSide: f?.shortSide != null ? Math.round(f.shortSide) : null,
+    styleShared: f?.styleUniqueness ? Math.round(1 / f.styleUniqueness) : null,
+    bordered: f?.bordered === 1,
+    padded: (f?.paddingRel ?? 0) > 0,
+  };
+}
+
 export function toElementDetails(r: PredictionResult, elementId: number): PredictionElementDetails | null {
   const e = r.elements.find((x) => x.elementRef.id === elementId);
   if (!e) return null;
@@ -73,11 +94,7 @@ export function toElementDetails(r: PredictionResult, elementId: number): Predic
     element: summarizeElement(e),
     regionLabel: region?.label ?? null,
     reasons: e.reasons.map((x) => ({ ...x })),
-    facts: {
-      peersNearby: f?.peersNearby ?? null,
-      viewportsDown: f?.viewportsDown ?? null,
-      heuristicDetection: f?.heuristicDetection === 1,
-    },
+    facts: reasonFacts(f),
     components: e.components
       ? (Object.fromEntries(COMPONENTS.map((c) => [c, directionOf(e.components![c])])) as Record<Component, ComponentDirection>)
       : null,

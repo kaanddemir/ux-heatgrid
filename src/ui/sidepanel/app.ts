@@ -9,13 +9,15 @@ import type { RecordedLayers, RecordedPageView, RecordedSessionView } from '../.
 import type { EventEnvelope, RequestMap, RequestType, Response } from '../../shared/protocol';
 import { el, errorText, mount } from '../shared/render';
 import { icon, type IconName } from '../shared/icons';
-import { BAND_COPY } from '../shared/predictionCopy';
-import { NOT_OPEN_COPY, itemLabel, shortMeta } from '../shared/recordedCopy';
+import { BAND_COPY, PREDICTED_EMPTY, PREDICT_HELP, STALE_COPY } from '../shared/predictionCopy';
+import { NOT_OPEN_COPY, RECORD_DESC, RECORD_HELP, itemLabel } from '../shared/recordedCopy';
+import { cleanSubject } from '../shared/regionLabel';
 import { INITIAL_NAV, SECTIONS, formatDuration, goSection, route, type Intent, type NavState, type Section } from './model';
 import { predictedBody, predictedHeadAction, predictedWarnings, predictionSummary, type PredictedHandlers, type PredictedModel } from './predictedView';
-import { recordedBody, recordedHeadAction, recordedWarnings, recordingSummary, stopButton, type RecordedHandlers, type RecordedViewModel } from './recordedView';
-import { button, dismissPopover, noticePanel, previewList, screen, screenHead, summary, tablist, type NoticeIssue } from './ui';
-import { rowModel, type Filter, type KindFilter } from './viewModel';
+import { recordedBody, recordedHeadAction, recordedWarnings, pagesChip, recordingSummary, stopButton, type RecordedHandlers, type RecordedViewModel } from './recordedView';
+import { actions, button, dismissPopover, helpTip, iconButton, noticePanel, previewList, screen, screenHead, summary, tablist, type NoticeIssue } from './ui';
+import { applyTheme, nextTheme, readTheme, THEME_LABEL, type Theme } from './theme';
+import { elementType, rowModel, type Filter, type KindFilter } from './viewModel';
 
 export interface PanelApi {
   request<T extends RequestType>(tabId: number, type: T, payload: RequestMap[T]['payload']): Promise<Response<RequestMap[T]['data']>>;
@@ -37,6 +39,7 @@ export interface PanelApp {
 
 /** Mode title on its inspector screen (the tab label, so the two never disagree). */
 const TITLE: Record<Exclude<Section, 'overview'>, string> = { predict: 'Predict', record: 'Record' };
+const THEME_ICON = { system: 'system', light: 'sun', dark: 'moon' } as const satisfies Record<Theme, IconName>;
 
 export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   let tab: chrome.tabs.Tab | null = null;
@@ -78,12 +81,25 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   const recListLimits = new Map<string, number>();
   let recNote: string | null = null;
   let recLoading: string | null = null;
-  /** Overview mode panels open independently; actions inside one never disturb the other. */
-  type ModePanel = 'predict' | 'record';
-  const overviewOpen = new Set<ModePanel>();
-  let autoOpenedFor: string | null = null;
-  const toggleOverviewCard = (card: ModePanel): void => {
-    if (!overviewOpen.delete(card)) overviewOpen.add(card);
+  // Help toggletips (?) next to the Predict / Record headings: at most one open.
+  let helpOpen: 'predict' | 'record' | null = null;
+  const help = (id: 'predict' | 'record'): HTMLElement =>
+    helpTip(id, TITLE[id], id === 'predict' ? PREDICT_HELP : RECORD_HELP, helpOpen === id, () => ((helpOpen = helpOpen === id ? null : id), render()));
+  /** Closes in place, without a re-render: a re-render here would replace the control the user is
+   *  clicking (pointerdown fires before click), and that click would be lost. */
+  const closeHelp = (): void => {
+    if (helpOpen === null) return;
+    helpOpen = null;
+    for (const b of root.querySelectorAll<HTMLElement>('.help-btn')) b.setAttribute('aria-expanded', 'false');
+    for (const t of root.querySelectorAll<HTMLElement>('.help-tip')) ((t.hidden = true), (t.textContent = ''));
+  };
+  root.ownerDocument.addEventListener('keydown', (e) => e.key === 'Escape' && closeHelp());
+  root.ownerDocument.addEventListener('pointerdown', (e) => !(e.target as Element | null)?.closest?.('.help') && closeHelp(), true);
+
+  let theme: Theme = readTheme(root.ownerDocument);
+  const cycleTheme = (): void => {
+    theme = nextTheme(theme);
+    applyTheme(root.ownerDocument, theme);
     render();
   };
   /** Live recording nodes of the current render, refreshed by SESSION_TICK without a full render. */
@@ -111,15 +127,23 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     return el(
       'header',
       { class: 'appbar' },
-      el('div', { class: 'appbar-row' }, el('div', { class: 'brand' }, el('img', { class: 'brand-mark', attrs: { src: '../icons/icon32.png', alt: '', width: '20', height: '20' } }), el('span', { class: 'brand-name', text: 'UX HeatGrid' })), livePill()),
+      el('div', { class: 'appbar-row' }, el('div', { class: 'brand' }, el('span', { class: 'brand-name', text: 'UX HeatGrid' })), livePill(), themeButton()),
       tablist('UX HeatGrid sections', SECTIONS.map((s) => ({ id: s.id, text: s.label, selected: nav.section === s.id, controls: 'main-view', onSelect: () => goTo(s.id) })), 'nav'),
     );
   }
 
-  /** App-bar status while recording, on screens that don't already show the live block → Record. */
+  /** Compact theme switch (System → Light → Dark), far right of the app bar. */
+  function themeButton(): HTMLButtonElement {
+    const next = nextTheme(theme);
+    const b = iconButton(THEME_ICON[theme], `Theme: ${THEME_LABEL[theme]}. Switch to ${THEME_LABEL[next]}`, cycleTheme, true, { key: 'theme' });
+    b.classList.add('theme-btn');
+    b.title = `Theme: ${THEME_LABEL[theme]}`;
+    return b;
+  }
+
+  /** App-bar status while recording, on the screen that doesn't already show the live block → Record. */
   function livePill(): HTMLElement | null {
-    const onLive = nav.section === 'record' || (nav.section === 'overview' && overviewOpen.has('record'));
-    if (!recordingActive() || onLive) return null;
+    if (!recordingActive() || nav.section !== 'predict') return null;
     const processing = sessionState() === 'processing';
     const time = el('span', { class: 'live-pill-time', text: processing ? 'Processing…' : '' });
     if (!processing) liveFills.push((s) => (time.textContent = formatDuration(s?.elapsedMs ?? 0)));
@@ -131,12 +155,23 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
 
   function main(): HTMLElement {
     const body = nav.section === 'predict' ? predictSection() : nav.section === 'record' ? recordSection() : overviewSection();
+    // Every page: feedback first, at the top of the content, directly under the navigation.
     return el(
       'main',
       { class: 'view', attrs: { id: 'main-view', role: 'tabpanel', 'aria-label': SECTIONS.find((s) => s.id === nav.section)!.label } },
-      nav.section === 'overview' ? activeNotice('overview', globalWarnings()) : null,
+      activeNotice(nav.section, [...globalWarnings(), ...sectionWarnings()]),
       body,
     );
+  }
+
+  /** Section feedback (Overview carries both features' issues that need the user). */
+  function sectionWarnings(): NoticeIssue[] {
+    if (nav.section === 'predict') return predictedWarnings(predictedModel(), predictedHandlers);
+    if (nav.section === 'record') return recordedWarnings(recordedModel(false), recordedHandlers);
+    const issues: NoticeIssue[] = [];
+    if (snap?.prediction.state === 'stale' && result) issues.push({ id: 'prediction-stale', severity: 'action', message: STALE_COPY, action: button('Run again', () => onPredict(), canAct() && !recordingActive(), { key: 'ov-predict-again', subtle: true }) });
+    if (snap?.session.state === 'error') issues.push({ id: 'recording-failed', severity: 'critical', message: 'Recording could not be processed.', action: button('Try again', () => onRecord(), canAct(), { key: 'ov-record-recover', subtle: true }) });
+    return issues;
   }
 
   const globalWarnings = (): NoticeIssue[] => error ? [{ id: `app-${error.code}`, severity: 'critical', message: errorText(error) }] : [];
@@ -154,24 +189,26 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   const fillLive = (): void => liveFills.forEach((f) => f(snap?.session.summary ?? null));
 
   /**
-   * The live recording block — one component on Overview and on the Record screen: a restrained
-   * status line (dot · state · pages) over the same summary cells the finished report uses.
+   * The live recording block, one component on Overview and on the Record screen: the same summary
+   * cells the finished report uses. The Stop button already says it is recording, so a status line
+   * shows only for Preparing / Processing.
    */
   function liveBlock(): HTMLElement {
     const st = sessionState();
     const processing = st === 'processing';
-    const pages = snap?.session.recording?.segmentCount ?? 1;
     const cell = (label: string, read: (s: SessionSummary | null) => string) => ({ label, value: '', live: (n: HTMLElement) => void liveFills.push((s) => (n.textContent = read(s))) });
     return el(
       'div',
       { class: 'live', attrs: { role: 'group', 'aria-label': 'Recording', 'data-kind': 'recorded' } },
-      el(
-        'p',
-        { class: 'live-status', attrs: { role: 'status' } },
-        processing ? el('span', { class: 'spinner' }) : el('span', { class: 'rec-dot', attrs: { 'aria-hidden': 'true' } }),
-        el('span', { class: 'live-state', text: processing ? 'Processing' : st === 'preparing' ? 'Preparing…' : 'Recording' }),
-        pages > 1 ? el('span', { class: 'live-pages', text: `${pages} pages` }) : null,
-      ),
+      // Multi-page counts sit beside Stop (pagesChip); the block itself needs no status line then.
+      st === 'recording'
+        ? null
+        : el(
+            'p',
+            { class: 'live-status', attrs: { role: 'status' } },
+            processing ? el('span', { class: 'spinner' }) : el('span', { class: 'rec-dot', attrs: { 'aria-hidden': 'true' } }),
+            el('span', { class: 'live-state', text: processing ? 'Processing' : 'Preparing…' }),
+          ),
       summary('Live recording', [
         cell('Duration', (s) => formatDuration(s?.elapsedMs ?? 0)),
         cell('Clicks', (s) => String(s?.clicks ?? 0)),
@@ -184,27 +221,22 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   // ---- Overview -----------------------------------------------------------
 
   /**
-   * Overview mode section: one header row (icon · name · action · chevron) whose whole surface is the
-   * expand toggle — the same full-row mechanics as inspector rows — and the existing report below.
+   * Overview feature section, always open: head (icon · name · one line · primary action) over the
+   * feature's current state, using the same components as its full screen.
    */
-  function modePanel(panel: ModePanel, ic: IconName, title: string, action: HTMLElement | null, body: () => Array<HTMLElement | null>): HTMLElement {
-    const open = overviewOpen.has(panel);
-    const bodyId = `ov-${panel}-report`;
-    const toggle = el('button', { class: 'mode-toggle', attrs: { type: 'button', 'aria-expanded': String(open), 'aria-controls': bodyId, 'aria-label': title }, on: { click: () => toggleOverviewCard(panel) } });
-    toggle.dataset.key = `ov-${panel}`;
+  function modePanel(panel: 'predict' | 'record', ic: IconName, title: string, desc: string, action: HTMLElement | null, body: Array<HTMLElement | null>): HTMLElement {
+    const titleId = `ov-${panel}-title`;
     return el(
       'section',
-      { class: open ? 'mode is-open' : 'mode', attrs: { 'data-kind': panel === 'predict' ? 'predicted' : 'recorded', 'aria-label': title } },
+      { class: 'mode', attrs: { 'data-kind': panel === 'predict' ? 'predicted' : 'recorded', 'aria-labelledby': titleId } },
       el(
         'div',
         { class: 'mode-head' },
-        toggle,
         el('span', { class: 'mode-icon', attrs: { 'aria-hidden': 'true' } }, icon(ic)),
-        el('span', { class: 'mode-title', attrs: { 'aria-hidden': 'true' }, text: title }),
+        el('span', { class: 'mode-text' }, el('span', { class: 'mode-title-row' }, el('h2', { class: 'mode-title', attrs: { id: titleId }, text: title }), help(panel)), el('span', { class: 'mode-desc', text: desc })),
         action,
-        icon('chevron', 'icon chev'),
       ),
-      open ? el('div', { class: 'mode-body', attrs: { id: bodyId } }, ...body()) : null,
+      el('div', { class: 'mode-body', attrs: { id: `ov-${panel}-report` } }, ...body),
     );
   }
 
@@ -220,7 +252,6 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     const report = result;
     const rows = report.elements.filter((e) => e.band !== 'not-assessed').slice(0, 3).map((e) => ({ label: rowModel(report, e).label, meta: BAND_COPY[e.band] }));
     return [
-      snap?.prediction.state === 'stale' ? noticePanel([{ id: 'prediction-stale', severity: 'action', message: 'Page changed', action: button('Run again', () => (overviewOpen.add('predict'), onPredict()), canAct() && !recordingActive(), { key: 'ov-predict-again', subtle: true }) }]) : null,
       predictionSummary(report.summary),
       previewList(rows),
       openReport('predict', 'ov-open-predict'),
@@ -229,8 +260,9 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
 
   function recordPreview(): Array<HTMLElement | null> {
     if (recordingActive()) return [liveBlock()];
-    if (!recSession) return [snap?.session.state === 'error' ? noticePanel([{ id: 'recording-failed', severity: 'critical', message: 'Recording could not be processed.' }]) : status('No recording yet.')];
-    const rows = recPage ? recPage.lists.mostInteracted.slice(0, 3).map((i) => ({ label: itemLabel(i), meta: shortMeta(i, 'mostInteracted') })) : [];
+    if (!recSession) return [snap?.session.state === 'error' ? null : status('No recording yet.')];
+    // Name · type, like the Record rows (activity lives in the full report).
+    const rows = recPage ? recPage.lists.mostInteracted.slice(0, 3).map((i) => ({ label: cleanSubject(itemLabel(i)), meta: elementType(i.tagName, i.role) ?? '' })) : [];
     return [recordingSummary(recSession, recPage), previewList(rows), openReport('record', 'ov-open-record')];
   }
 
@@ -253,12 +285,17 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   function overviewSection(): HTMLElement {
     const analysing = snap?.prediction.state === 'analyzing';
     const live = recordingActive();
-    const predictStart = button(analysing ? 'Running…' : 'Start', () => (overviewOpen.add('predict'), onPredict()), canAct() && !live && !analysing, { key: 'ov-start-predict', primary: true });
-    const recordAction = live ? stopButton(sessionState(), busy, onStop) : button('Start', () => (overviewOpen.add('record'), onRecord()), canAct(), { key: 'ov-start-record', primary: true });
+    const predictStart = button(analysing ? 'Running…' : 'Start', () => onPredict(), canAct() && !live && !analysing, { key: 'ov-start-predict' });
+    const recordAction = live ? actions(pagesChip(sessionState() === 'recording' ? (snap?.session.recording?.segmentCount ?? 1) : 1), stopButton(sessionState(), busy, onStop)) : button('Start', () => onRecord(), canAct(), { key: 'ov-start-record' });
     return screen(
       'overview',
       pageIdentity(),
-      el('div', { class: 'modes' }, modePanel('predict', 'predict', 'Predict', predictStart, predictPreview), modePanel('record', 'record', 'Record', recordAction, recordPreview)),
+      el(
+        'div',
+        { class: 'modes' },
+        modePanel('predict', 'predict', 'Predict', PREDICTED_EMPTY.body, predictStart, predictPreview()),
+        modePanel('record', 'record', 'Record', RECORD_DESC, recordAction, recordPreview()),
+      ),
     );
   }
 
@@ -287,8 +324,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     const pm = predictedModel();
     return screen(
       'predicted',
-      activeNotice('predict', [...globalWarnings(), ...predictedWarnings(pm, predictedHandlers)]),
-      screenHead(TITLE.predict, { trailing: predictedHeadAction(pm, predictedHandlers) }),
+      screenHead(TITLE.predict, { trailing: predictedHeadAction(pm, predictedHandlers), help: help('predict') }),
       predictedBody(pm, predictedHandlers, bandLimits, (band) => (bandLimits.set(band, (bandLimits.get(band) ?? 5) + 5), render())),
     );
   }
@@ -310,8 +346,12 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   };
 
   function recordSection(): HTMLElement {
-    const rm: RecordedViewModel = { snap, session: recSession, page: recPage, selected: recSelected, filterOpen: recFiltersOpen, listLimits: recListLimits, note: recNote, busy, canRun: canAct(), collapsed, live: recordingActive() ? liveBlock() : null };
-    return screen('recorded', activeNotice('record', [...globalWarnings(), ...recordedWarnings(rm, recordedHandlers)]), screenHead(TITLE.record, { trailing: recordedHeadAction(rm, recordedHandlers) }), recordedBody(rm, recordedHandlers));
+    const rm = recordedModel();
+    return screen('recorded', screenHead(TITLE.record, { trailing: recordedHeadAction(rm, recordedHandlers), help: help('record') }), recordedBody(rm, recordedHandlers));
+  }
+
+  function recordedModel(withLive = true): RecordedViewModel {
+    return { snap, session: recSession, page: recPage, selected: recSelected, filterOpen: recFiltersOpen, listLimits: recListLimits, note: recNote, busy, canRun: canAct(), collapsed, live: withLive && recordingActive() ? liveBlock() : null };
   }
 
   // -------------------------------------------------------------------------
@@ -321,6 +361,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
   function goTo(section: Section): void {
     if (section !== nav.section) {
       dismissPopover();
+      helpOpen = null;
       predFiltersOpen = false;
       recFiltersOpen = false;
     }
@@ -451,9 +492,9 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
     apply(res.data.snapshot);
     focusNote =
       res.data.status === 'unavailable'
-        ? 'No longer on the page'
+        ? 'No longer on the page.'
         : res.data.moved
-          ? 'Moved since the prediction · shown where it is now'
+          ? 'Moved since the prediction.'
           : null;
   }
 
@@ -499,7 +540,7 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       return;
     }
     apply(res.data.snapshot);
-    recNote = res.data.status === 'not-open' ? NOT_OPEN_COPY : res.data.status === 'unavailable' && recPage?.elementsLive ? 'Not on the page now' : null;
+    recNote = res.data.status === 'not-open' ? NOT_OPEN_COPY : res.data.status === 'unavailable' && recPage?.elementsLive ? 'No longer on the page.' : null;
   }
 
   function onRecordedSelect(id: number): void {
@@ -543,8 +584,9 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       if (recSession || recPage) ((recSession = null), (recPage = null), (recSelected = null), (recNote = null), (recLoading = null));
       return;
     }
-    const key = `${next.session.sessionId}:${rec.page}:${rec.pageOpen}`;
-    const loaded = recSession && recPage ? `${recSession.sessionId}:${recPage.position}:${recPage.pageOpen}` : null;
+    // The layout flag is part of the key: the page view (and its warning) is refetched when it flips.
+    const key = `${next.session.sessionId}:${rec.page}:${rec.pageOpen}:${rec.layoutChanged}`;
+    const loaded = recSession && recPage ? `${recSession.sessionId}:${recPage.position}:${recPage.pageOpen}:${recPage.layoutMayHaveChanged}` : null;
     const id = tabId();
     if (key === loaded || key === recLoading || id === null) return;
     recLoading = key;
@@ -568,10 +610,6 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
       next = { ...next, prediction: snap.prediction };
     }
     snap = next;
-    // A session that starts (from any tab) opens the Overview Record card once per session; ticks,
-    // page navigations and re-renders never touch it again, so only the user can collapse it.
-    const sid = next.session.sessionId ?? null;
-    if (recordingActive() && sid !== autoOpenedFor) ((autoOpenedFor = sid), overviewOpen.add('record'));
     if (next.session.error) error = next.session.error;
     const p = next.prediction;
     if (p.state === 'idle' || p.state === 'error') ((result = null), (selectedId = null), (details = null), (focusNote = null));
@@ -587,19 +625,14 @@ export function createPanelApp(root: HTMLElement, api: PanelApi): PanelApp {
 
   async function refresh(): Promise<void> {
     const generation = ++refreshGeneration;
-    const previousTabId = tabId();
     const nextTab = await api.activeTab();
     if (generation !== refreshGeneration) return;
     tab = nextTab;
     const nextTabId = nextTab?.id;
-    const activeTabChanged = previousTabId !== null && previousTabId !== tabId();
     snap = null;
     error = null;
     ((result = null), (selectedId = null), (details = null), (focusNote = null));
     ((recSession = null), (recPage = null), (recSelected = null), (recNote = null), (recLoading = null));
-    // A same-tab load completion (including navigation during recording) refreshes runtime data,
-    // not local disclosure state. Only switching to a different tab resets the Overview cards.
-    if (activeTabChanged) overviewOpen.clear();
     intent = null;
     if (nextTabId === undefined) {
       render();

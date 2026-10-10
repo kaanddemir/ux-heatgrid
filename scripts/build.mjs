@@ -11,7 +11,11 @@ const dist = join(root, 'dist');
 const watch = process.argv.includes('--watch');
 
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
-const buildId = `${pkg.version}+${Date.now().toString(36)}`;
+// Release builds are byte-for-byte reproducible. Watch sessions still need a unique id so a newly
+// built runtime can replace the previous injected runtime without reloading the tab. A released
+// update always changes the version, and a runtime left by a reloaded extension fails its context
+// check (content/index.ts), so the version alone identifies a release runtime.
+const buildId = watch ? `${pkg.version}+dev.${Date.now().toString(36)}` : pkg.version;
 
 const common = {
   bundle: true,
@@ -32,7 +36,6 @@ const entries = [
 ];
 
 const staticFiles = [
-  ['manifest.json', 'manifest.json'],
   ['ui/sidepanel/index.html', 'sidepanel/index.html'],
   ['ui/shared/tokens.css', 'shared/tokens.css'],
 ];
@@ -43,6 +46,10 @@ async function copyStatic() {
     await mkdir(dirname(target), { recursive: true });
     await cp(join(src, from), target);
   }
+  // The manifest version always follows package.json, so the two can never drift.
+  const manifest = JSON.parse(await readFile(join(src, 'manifest.json'), 'utf8'));
+  manifest.version = pkg.version;
+  await writeFile(join(dist, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await cp(join(root, 'icons'), join(dist, 'icons'), { recursive: true });
   await writeFile(join(dist, 'BUILD_ID'), `${buildId}\n`);
 }

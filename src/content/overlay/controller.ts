@@ -4,10 +4,12 @@
  * - Element-based outlines, never a density map (warm heat colours are reserved for Recorded).
  * - Positions come from LIVE getBoundingClientRect() of elements resolved through the shared
  *   ElementRegistry (cached id → Element), never from analysis-time rects.
- * - Updates are event-driven: scroll (capture, passive) / resize / document size changes schedule
- *   ONE requestAnimationFrame; the frame does all reads, then all writes. No polling, no DOM-wide
- *   queries, no analysis and no prediction work during scrolling.
- * - Elements that can no longer be resolved are simply not drawn.
+ * - Updates are event-driven: scroll (capture, passive) / resize / document size changes, and clicks
+ *   and finished transitions (menus opening / closing) schedule ONE requestAnimationFrame; the frame
+ *   does all reads, then all writes. No polling, no DOM-wide queries, no analysis and no prediction
+ *   work during scrolling.
+ * - Elements that can no longer be resolved, or are no longer visible (hidden / transparent), are
+ *   simply not drawn.
  */
 import { overlayBox, sameBox, type Box } from './positioning';
 import { renderPredictionFilter } from './legend';
@@ -44,6 +46,10 @@ interface Slot {
 }
 
 const CLIPPING = /(hidden|scroll|auto|clip)/;
+/** Page interactions after which predicted elements may have appeared, moved or been hidden. */
+const RELAYOUT_EVENTS = ['click', 'transitionend'] as const;
+/** Same visibility rule as the analyzer's `rendered` (visibility, opacity, display). */
+const VISIBLE = { visibilityProperty: true, opacityProperty: true } as const;
 
 export class OverlayController {
   private readonly win: Window;
@@ -202,6 +208,7 @@ export class OverlayController {
     this.root = createOverlayRoot(this.win.document);
     this.win.addEventListener('scroll', this.onScroll, { capture: true, passive: true });
     this.win.addEventListener('resize', this.onScroll, { passive: true });
+    for (const type of RELAYOUT_EVENTS) this.win.addEventListener(type, this.onScroll, { capture: true, passive: true });
     if (typeof ResizeObserver !== 'undefined') {
       this.resizeObserver = new ResizeObserver(this.onScroll);
       this.resizeObserver.observe(this.win.document.documentElement);
@@ -213,6 +220,7 @@ export class OverlayController {
     this.frame = null;
     this.win.removeEventListener('scroll', this.onScroll, { capture: true });
     this.win.removeEventListener('resize', this.onScroll);
+    for (const type of RELAYOUT_EVENTS) this.win.removeEventListener(type, this.onScroll, { capture: true });
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.root?.remove();
@@ -263,7 +271,7 @@ export class OverlayController {
     const boxes: Array<Box | null> = [];
     for (const slot of this.slots.values()) {
       if (!slot.el || !slot.el.isConnected) slot.el = this.deps.resolve(slot.item.id);
-      if (!slot.el) {
+      if (!slot.el || slot.el.checkVisibility?.(VISIBLE) === false) {
         boxes.push(null);
         continue;
       }

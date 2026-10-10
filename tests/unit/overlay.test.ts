@@ -230,6 +230,26 @@ describe('OverlayController', () => {
     expect(o.inspect().missing).toEqual([2]);
   });
 
+  it('elements hidden after the prediction (closed menu) are not drawn; a click re-lays out', () => {
+    const { o, f, preds } = setupOverlay();
+    o.setPrediction(preds);
+    o.setVisible(true);
+    f.run();
+    const b = document.getElementById('b')! as Element & { checkVisibility?: () => boolean };
+    b.checkVisibility = () => false; // e.g. visibility: hidden / opacity: 0 — the rect is unchanged
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    f.run();
+    expect(o.inspect().boxes.find((x) => x.id === 2)!.drawn).toBe(false);
+    b.checkVisibility = () => true; // reopened; its transition ends
+    document.body.dispatchEvent(new Event('transitionend', { bubbles: true }));
+    f.run();
+    expect(o.inspect().boxes.find((x) => x.id === 2)!.drawn).toBe(true);
+    o.setVisible(false); // unmounted: page clicks no longer schedule frames
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(f.run).not.toThrow();
+    expect(o.stats.frames).toBe(3);
+  });
+
   it('selection: selected box distinct, others dimmed, Low shown when selected', () => {
     const { o, f, preds } = setupOverlay();
     o.setPrediction(preds);

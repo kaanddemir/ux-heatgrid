@@ -59,3 +59,12 @@ export const MAYBE_NOT_GROUP_PX = 24;
 
 /** Layout drift between recording and the live page that triggers the "may have changed" note. */
 export const LAYOUT_CHANGE_SHARE = 0.15;
+/**
+ * Layout anchors: the controls that explain most of the map. When they still sit where they were
+ * at Stop (within LAYOUT_SHIFT_PX — about three 8 px density cells, well inside the blur), the map
+ * still matches; when more than LAYOUT_MOVED_SHARE of their weight moved or disappeared, it may not.
+ */
+export const LAYOUT_ANCHOR_MAX = 16;
+export const LAYOUT_SHIFT_PX = 24;
+export const LAYOUT_MOVED_SHARE = 0.25;
+export const CLICK_ANCHOR_MS = 1000;

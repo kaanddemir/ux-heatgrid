@@ -356,8 +356,8 @@ export class RecordedOverlay {
  * heat ramp and on light or dark pages), small glass pills for text.
  */
 const WHITE = '#ffffff';
-const HALO = 'rgba(14, 15, 22, 0.55)';
-const PILL = 'rgba(16, 17, 24, 0.82)';
+const HALO = 'rgba(23, 23, 23, 0.55)';
+const PILL = 'rgba(23, 23, 23, 0.82)';
 const PILL_EDGE = 'rgba(255, 255, 255, 0.14)';
 /** Height kept free above the bottom edge for the responsive floating control card. */
 const LEGEND_BAND = 88;
@@ -439,7 +439,7 @@ function drawScrollLine(ctx: CanvasRenderingContext2D, y: number, width: number,
   ctx.moveTo(0, ly);
   ctx.lineTo(width, ly);
   ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(14, 15, 22, 0.28)';
+  ctx.strokeStyle = 'rgba(23, 23, 23, 0.28)';
   ctx.stroke();
   ctx.lineWidth = 1;
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';

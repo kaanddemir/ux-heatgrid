@@ -156,7 +156,7 @@ export function scoreOne(f: PredictionFeatures): PredictorOutput {
 
 export const heuristicV1: Predictor = {
   id: 'heuristic-v1',
-  version: '1.0.0',
+  version: '1.1.0',
   featureSchema: FEATURE_SCHEMA,
   predict(features: PredictionFeatures[], _context: PagePredictionContext): PredictorOutput[] {
     return features.map(scoreOne);

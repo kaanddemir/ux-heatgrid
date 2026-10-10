@@ -22,8 +22,12 @@ export const ROOT = path.resolve(here, '../..');
 export const DIST = path.join(ROOT, 'dist');
 const FIXTURES = path.join(here, 'fixtures');
 
+if (!process.env.PLAYWRIGHT_DIR) {
+  console.error('Set PLAYWRIGHT_DIR to a directory containing the playwright package (see tests/browser/README.md).');
+  process.exit(2);
+}
 const require = createRequire(import.meta.url);
-const { chromium } = require(path.join(process.env.PLAYWRIGHT_DIR ?? '', 'playwright'));
+const { chromium } = require(path.join(process.env.PLAYWRIGHT_DIR, 'playwright'));
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

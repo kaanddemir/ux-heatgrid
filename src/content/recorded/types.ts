@@ -67,6 +67,12 @@ export interface RecordedPageResult {
   maybeNotClickable: MaybeNotClickableSpot[];
   facts: RecordedPageFacts;
   reprojection: ReprojectionStats;
+  /**
+   * Where the most-used controls were when the recording stopped (root content coordinates), so a
+   * later view can tell whether the live layout still matches the map. Only for the local segment;
+   * control geometry only, nothing about the person.
+   */
+  layoutAnchors: LayoutAnchor[];
   limitations: RecordedLimitationCode[];
   timings: { processMs: number };
 }
@@ -104,6 +110,8 @@ export interface RecordedSnapshot {
   focusedElementId: number | null;
   /** The live page is the selected page segment's page (its map can be drawn). */
   pageOpen: boolean;
+  /** The open page's layout no longer matches the selected page's map (recorded/layout.ts). */
+  layoutChanged: boolean;
 }
 
 export interface RecordedPageRef {
@@ -153,4 +161,16 @@ export interface RecordedPageView {
 /** FOCUS_RECORDED_ELEMENT outcome. */
 export interface RecordedFocusResult {
   status: 'focused' | 'cleared' | 'unavailable' | 'not-open';
+}
+
+/** A control's rect when the recording stopped, weighted by how much of the map it explains. */
+export interface LayoutAnchor {
+  elementRef: number;
+  rootId: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Pointer dwell (ms) anchored to it plus CLICK_ANCHOR_MS per click. */
+  weight: number;
 }

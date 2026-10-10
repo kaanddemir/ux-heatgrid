@@ -5,9 +5,11 @@
 import type { RecordedLimitationCode } from '../../content/recorded/types';
 import type { RecordedListItem } from '../../content/recorded/lists';
 
-export const NOT_OPEN_COPY = 'Page not open · map not drawn';
-export const NOT_LIVE_COPY = 'Page reloaded since · controls can’t be outlined';
-export const LAYOUT_COPY = 'Layout changed';
+export const NOT_OPEN_COPY = 'Page not open, so its map isn’t shown.';
+export const NOT_LIVE_COPY = 'Page reloaded, so controls can’t be outlined.';
+export const LAYOUT_COPY = 'Layout changed, so the map may be off.';
+/** What the Scroll percentage measures (it includes the first screen). */
+export const SCROLL_HINT = 'How far down the page was shown on screen, including the first screen. Shows a dash when the page fit on one screen.';
 
 export const LIST_COPY = {
   mostInteracted: { title: 'Interacted Elements' },
@@ -15,17 +17,17 @@ export const LIST_COPY = {
 } as const;
 
 export const RECORDED_LIMITATION_COPY: Record<RecordedLimitationCode, string> = {
-  SHORT_SESSION: 'Short session (under 10 seconds active).',
-  LITTLE_SCROLL: 'Little scrolling happened in this session.',
-  FEW_EVENTS: 'Few pointer events were recorded.',
-  PAGE_CHANGED: 'The page changed substantially while recording.',
+  SHORT_SESSION: 'Short session.',
+  LITTLE_SCROLL: 'Little scrolling.',
+  FEW_EVENTS: 'Few pointer events.',
+  PAGE_CHANGED: 'Page changed while recording.',
   FRAMES_UNSUPPORTED: 'Embedded frames were not recorded.',
   NESTED_SCROLL_UNTRACKED: 'Some scroll areas were not tracked.',
-  LONG_SESSION_COARSENED: 'Long session: later pointer data was kept at lower resolution.',
-  CANDIDATES_CAPPED: 'Very many controls: only some were tracked.',
-  MULTI_PAGE_SESSION_COARSENED: 'Earlier pages were kept at lower resolution to stay within the storage budget.',
-  RECORDING_INTERRUPTED_UNSUPPORTED_PAGE: 'Recording was interrupted on a page UX HeatGrid cannot access.',
-  REPROJECTION_UNCERTAIN: 'Some controls moved a lot during recording; their pointer time is shown where it was recorded.',
+  LONG_SESSION_COARSENED: 'Long session, so later data is less detailed.',
+  CANDIDATES_CAPPED: 'Only some controls were tracked.',
+  MULTI_PAGE_SESSION_COARSENED: 'Earlier pages are less detailed.',
+  RECORDING_INTERRUPTED_UNSUPPORTED_PAGE: 'Interrupted on an unsupported page.',
+  REPROJECTION_UNCERTAIN: 'Some controls moved while recording.',
 };
 
 const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
@@ -72,3 +74,9 @@ export function detailFacts(i: RecordedListItem): Array<[string, string]> {
   ];
   return rows.filter((r): r is [string, string] => !!r);
 }
+
+/** Record's one-line description (Overview head and the Record empty state). */
+export const RECORD_DESC = 'Capture a live session.';
+
+/** Help (?) next to the Record heading. */
+export const RECORD_HELP = 'Records your actual interactions on the page during a session.';

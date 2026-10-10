@@ -18,7 +18,10 @@ import { liveRecorderListeners, startRecorder, type Recorder } from './recorder'
 import { pageIdentity, type ContinuityChannel, type PageCaptureSegment, type RecordingSessionResult } from './recorder/segment';
 import { RecordedOverlay } from './overlay/recorded';
 import { recordedTitle } from './overlay/legend';
-import { LAYOUT_CHANGE_SHARE } from './recorded/config';
+import { layoutMayHaveChanged } from './recorded/layout';
+
+/** Layout re-check delay after the last resize / document size change. */
+const LAYOUT_CHECK_DEBOUNCE_MS = 300;
 import { processSession } from './recorded/process';
 import type { RectOf } from './recorded/reproject';
 import { toPageView, toSessionView } from './recorded/result';
@@ -124,7 +127,9 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
   const recordedSnapshot = (): RecordedSnapshot | null => {
     const p = selectedPage();
     if (!recorded || !p) return null;
-    return { page: recordedPage, pageCount: recorded.segments.length, layers: { ...layers }, focusedElementId: recordedFocus, pageOpen: pageOpen(p) };
+    const open = pageOpen(p);
+    lastLayoutChanged = open && layoutChanged(p);
+    return { page: recordedPage, pageCount: recorded.segments.length, layers: { ...layers }, focusedElementId: recordedFocus, pageOpen: open, layoutChanged: lastLayoutChanged };
   };
 
   /** Shows the selected page's map only when it is the live page; never paints another page's map. */
@@ -142,7 +147,40 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
     emitState();
   }
 
+  /**
+   * While a result exists, re-check the layout after resizes and document size changes (debounced)
+   * and emit only when the answer flips, so the panel's warning follows the page both ways.
+   */
+  let lastLayoutChanged = false;
+  let layoutWatch: (() => void) | null = null;
+  const watchLayout = (): void => {
+    if (layoutWatch) return;
+    const w = win();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const check = (): void => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        const p = selectedPage();
+        const now = !!p && pageOpen(p) && layoutChanged(p);
+        if (now !== lastLayoutChanged) emitState();
+      }, LAYOUT_CHECK_DEBOUNCE_MS);
+    };
+    w.addEventListener('resize', check, { passive: true });
+    const RO = (w as Window & typeof globalThis).ResizeObserver;
+    const ro = RO ? new RO(check) : null;
+    ro?.observe(w.document.documentElement);
+    layoutWatch = () => {
+      if (timer !== null) clearTimeout(timer);
+      w.removeEventListener('resize', check);
+      ro?.disconnect();
+      layoutWatch = null;
+    };
+  };
+
   const dropRecorded = (): void => {
+    layoutWatch?.();
+    lastLayoutChanged = false;
     recorded = null;
     recordedPage = 0;
     recordedFocus = null;
@@ -168,12 +206,26 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
     };
   };
 
-  const layoutMayHaveChanged = (p: RecordedPageResult): boolean => {
-    if (p.limitations.includes('PAGE_CHANGED')) return true;
+  /** Live rect of a recorded control in its root's content coordinates (nested roots from the page result). */
+  const liveRectForPage = (p: RecordedPageResult): RectOf => {
+    const containers = new Map(p.scrollMetrics.nested.filter((n) => n.elementRef !== undefined).map((n) => [n.rootId, n.elementRef!]));
+    const w = win();
+    return (ref, rootId) => {
+      const el = resolve(ref);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const cRef = containers.get(rootId);
+      if (cRef === undefined) return { x: r.x + w.scrollX, y: r.y + w.scrollY, width: r.width, height: r.height };
+      const c = resolve(cRef);
+      if (!c) return null;
+      const cr = c.getBoundingClientRect();
+      return { x: r.x - cr.left - c.clientLeft + c.scrollLeft, y: r.y - cr.top - c.clientTop + c.scrollTop, width: r.width, height: r.height };
+    };
+  };
+  const layoutChanged = (p: RecordedPageResult): boolean => {
     const w = win();
     const se = w.document.scrollingElement ?? w.document.documentElement;
-    const changed = (a: number, b: number): boolean => a > 0 && b > 0 && Math.abs(a - b) / b > LAYOUT_CHANGE_SHARE;
-    return changed(se.scrollHeight, p.dimensions.documentHeight) || changed(w.innerWidth, p.dimensions.viewport.width);
+    return layoutMayHaveChanged(p, { documentHeight: se.scrollHeight, viewportWidth: w.innerWidth, rectOf: liveRectForPage(p) });
   };
   const getOverlay = (): OverlayLike => {
     overlay ??= deps.createOverlay
@@ -239,6 +291,7 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
     pageTitle: () => (typeof document !== 'undefined' ? document.title : ''),
     process: (rs, localIndex) => {
       recorded = processSession(rs, { localIndex, rectOf: liveRectOf(rs, localIndex) });
+      watchLayout();
       const local = recorded.segments.findIndex((p) => p.local);
       recordedPage = local >= 0 ? local : recorded.segments.length - 1;
       recordedFocus = null;
@@ -402,7 +455,7 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
           const p = recorded?.segments[pos];
           if (!recorded || !p) return ok(null);
           const open = pageOpen(p);
-          return ok(toPageView(p, pos, recorded.segments.length, { pageOpen: open, elementsLive: open && p.local, layoutMayHaveChanged: open && layoutMayHaveChanged(p) }));
+          return ok(toPageView(p, pos, recorded.segments.length, { pageOpen: open, elementsLive: open && p.local, layoutMayHaveChanged: open && layoutChanged(p) }));
         }
         case 'SET_RECORDED_PAGE': {
           const pos = (msg as RequestEnvelope<'SET_RECORDED_PAGE'>).payload.page;
@@ -515,6 +568,7 @@ export function createTabRuntime(deps: TabRuntimeDeps): TabRuntime {
       overlay?.dispose();
       overlay = null;
       recordedOverlay?.dispose();
+      layoutWatch?.();
       recordedOverlay = null;
       analyzer.dispose();
     },

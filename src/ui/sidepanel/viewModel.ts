@@ -27,7 +27,7 @@ export function predictedViewState(p: PredictionSnapshot | null | undefined): Pr
     case 'stale':
       return { kind: 'stale', action: 'Run again', notice: STALE_COPY };
     case 'error':
-      return { kind: 'error', action: 'Try again', message: "The prediction couldn't be completed on this page." };
+      return { kind: 'error', action: 'Try again', message: 'Prediction failed.' };
     default:
       return { kind: 'empty', action: 'Predict' };
   }
@@ -71,6 +71,12 @@ export interface RowModel {
 }
 
 const TAG_TYPE: Record<string, string> = { a: 'Link', button: 'Button', input: 'Input', select: 'Select', textarea: 'Textarea' };
+const ROLE_TYPE: Record<string, string> = { button: 'Button', link: 'Link', tab: 'Tab', checkbox: 'Choice', radio: 'Choice', switch: 'Choice', menuitem: 'Menu item', option: 'Option', textbox: 'Input', searchbox: 'Input', combobox: 'Select' };
+
+/** Element type for a row ("Link", "Button"), from its tag, else its role; null when unknown. */
+export function elementType(tagName: string, role?: string): string | null {
+  return TAG_TYPE[tagName.toLowerCase()] ?? (role ? (ROLE_TYPE[role] ?? null) : null);
+}
 
 export function rowModel(r: PredictionSummaryResult, e: PredictionSummaryElement): RowModel {
   // Row meta answers "what is it" only; the named page area is kept for the expanded detail.

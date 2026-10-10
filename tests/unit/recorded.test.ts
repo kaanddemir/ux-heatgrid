@@ -14,7 +14,10 @@ import { cellSizeFor, gridTotal } from '../../src/content/recorded/density';
 import { buildLists } from '../../src/content/recorded/lists';
 import { clusterClicks } from '../../src/content/recorded/markers';
 import { intensity, upperBound } from '../../src/content/recorded/normalize';
-import { densityGrids, processPage, processSession } from '../../src/content/recorded/process';
+import { densityGrids, layoutAnchors, processPage, processSession } from '../../src/content/recorded/process';
+import { layoutMayHaveChanged } from '../../src/content/recorded/layout';
+import { scrollDepth } from '../../src/content/recorded/result';
+import { LAYOUT_ANCHOR_MAX, LAYOUT_SHIFT_PX } from '../../src/content/recorded/config';
 import { smoothGrid } from '../../src/content/recorded/smooth';
 import { tilePixels, tilesForBand } from '../../src/content/recorded/tiles';
 import type { RecordedPageResult } from '../../src/content/recorded/types';
@@ -93,6 +96,75 @@ const dwell = (x: number, y: number, ms: number, step = 40): Sample[] => Array.f
 const click = (id: number, x: number, y: number, t: number, extra: Partial<ClickEvent> = {}): ClickEvent => ({ id, t, kind: 'pointer', rootId: 0, x, y, interactive: 'yes', ...extra });
 
 // ---------------------------------------------------------------------------
+
+describe('Layout changed warning', () => {
+  // Two controls carry the map: #1 (3 s of dwell + 2 clicks) and #2 (1 s of dwell).
+  const samples = [...dwell(150, 150, 3000).map((s) => ({ ...s, ref: 1 })), ...dwell(150, 650, 1000).map((s) => ({ ...s, ref: 2 }))];
+  const seg = segment(pointer(samples), { clicks: [click(1, 150, 150, 10, { elementRef: 1 }), click(2, 150, 150, 900, { elementRef: 1 })] });
+  const atStop: Record<number, { x: number; y: number; width: number; height: number }> = { 1: { x: 100, y: 120, width: 200, height: 60 }, 2: { x: 100, y: 620, width: 200, height: 60 } };
+  const page = processPage(seg, { local: true, rectOf: (ref) => atStop[ref] ?? null });
+  const live = (rects: Record<number, { x: number; y: number; width: number; height: number } | null>, over: { documentHeight?: number; viewportWidth?: number } = {}) => ({
+    documentHeight: over.documentHeight ?? 2400,
+    viewportWidth: over.viewportWidth ?? 1280,
+    rectOf: (ref: number) => rects[ref] ?? null,
+  });
+  const shifted = (dy: number) => Object.fromEntries(Object.entries(atStop).map(([k, r]) => [k, { ...r, y: r.y + dy }]));
+
+  it('anchors are the controls behind the map, heaviest first, with their rect at Stop', () => {
+    expect(page.layoutAnchors.map((a) => a.elementRef)).toEqual([1, 2]);
+    expect(page.layoutAnchors[0]).toMatchObject({ x: 100, y: 120, width: 200, height: 60 });
+    expect(page.layoutAnchors[0]!.weight).toBeGreaterThan(page.layoutAnchors[1]!.weight);
+    expect(processPage(seg, { local: false, rectOf: (ref) => atStop[ref] ?? null }).layoutAnchors).toEqual([]); // other documents: nothing to compare
+    const many = segment(pointer(Array.from({ length: 40 }, (_, i) => ({ x: 10, y: 10 + i * 30, w: 40, ref: i + 1 }))));
+    expect(layoutAnchors(many, () => ({ x: 0, y: 0, width: 10, height: 10 }))).toHaveLength(LAYOUT_ANCHOR_MAX);
+  });
+
+  it('no warning when nothing moved, even if content was appended below or the page changed while recording', () => {
+    expect(layoutMayHaveChanged(page, live(atStop))).toBe(false);
+    // Infinite scroll / lazy load: +60% document height (the old height rule warned here).
+    expect(layoutMayHaveChanged(page, live(atStop, { documentHeight: 3840 }))).toBe(false);
+    // Many DOM mutations during recording (carousel, ticker) do not move the recorded controls.
+    expect(layoutMayHaveChanged({ ...page, limitations: ['PAGE_CHANGED'] }, live(atStop))).toBe(false);
+    // Minor shifts stay inside the blur.
+    expect(layoutMayHaveChanged(page, live(shifted(LAYOUT_SHIFT_PX - 4)))).toBe(false);
+  });
+
+  it('warns when the recorded controls moved, even if the document height barely changed', () => {
+    // A 90 px banner inserted at the top: +4% height (the old rule missed it).
+    expect(layoutMayHaveChanged(page, live(shifted(90), { documentHeight: 2490 }))).toBe(true);
+    // Only the light control moved: below the share that matters.
+    expect(layoutMayHaveChanged(page, live({ ...atStop, 2: { ...atStop[2]!, y: 900 } }))).toBe(false);
+    // The heavy control disappeared (removed / no longer resolvable).
+    expect(layoutMayHaveChanged(page, live({ 2: atStop[2]! }))).toBe(true);
+  });
+
+  it('warns on a material width change and when controls already moved too far while recording', () => {
+    expect(layoutMayHaveChanged(page, live(atStop, { viewportWidth: 1024 }))).toBe(true); // zoom 125% / narrower window
+    expect(layoutMayHaveChanged(page, live(atStop, { viewportWidth: 1200 }))).toBe(false);
+    expect(layoutMayHaveChanged({ ...page, limitations: ['REPROJECTION_UNCERTAIN'] }, live(atStop))).toBe(true);
+  });
+
+  it('without anchors (no control used) it falls back to the coarse document rule', () => {
+    const bare = { ...page, layoutAnchors: [] };
+    expect(layoutMayHaveChanged(bare, live({}))).toBe(false);
+    expect(layoutMayHaveChanged(bare, live({}, { documentHeight: 3840 }))).toBe(true);
+    expect(layoutMayHaveChanged({ ...bare, limitations: ['PAGE_CHANGED'] }, live({}))).toBe(true);
+  });
+});
+
+describe('Scroll depth', () => {
+  const doc = (scrollHeight: number, clientHeight: number, deepestPx: number) => ({
+    scrollMetrics: { document: { deepestPx, deepestFraction: deepestPx / scrollHeight, scrollHeight, clientHeight }, nested: [] },
+  });
+  it('is the deepest visible point over the page height, first screen included', () => {
+    expect(scrollDepth(doc(2400, 800, 800))).toBeCloseTo(0.333); // no scrolling yet: the first screen
+    expect(scrollDepth(doc(2400, 800, 2400))).toBe(1);
+  });
+  it('is not reported for a page that fits on one screen (100% would claim scrolling)', () => {
+    expect(scrollDepth(doc(800, 800, 800))).toBeNull();
+    expect(scrollDepth({ scrollMetrics: { document: null, nested: [] } })).toBeNull();
+  });
+});
 
 describe('Recorded processing', () => {
   it('density is time-weighted dwell: more dwell → more heat; clicks alone add no density', () => {
@@ -224,7 +296,7 @@ describe('Recorded multi-page processing', () => {
 
 // ---------------------------------------------------------------------------
 
-const PREDICTION_INDIGO = ['#397bfa', '#2a6ae6', '#1f5fd6', '#6fa0ff', '#5b93ff'];
+const PREDICTION_BANDS = ['#9c7a55', '#e0c3a5', '#868079', '#a3a3a3'];
 const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)) as [number, number, number];
 function hue([r, g, b]: number[]): number {
   const max = Math.max(r!, g!, b!);
@@ -261,19 +333,19 @@ describe('Recorded rendering', () => {
   it('warm heat ramp only (never Prediction indigo); zero is transparent, peak stays see-through', () => {
     const lut = heatLut();
     expect(lut[3]).toBe(0); // intensity 0
-    const indigo = PREDICTION_INDIGO.map(hex);
+    const bands = PREDICTION_BANDS.map(hex);
     for (let i = 1; i < 256; i++) {
       const c = [lut[i * 4]!, lut[i * 4 + 1]!, lut[i * 4 + 2]!];
       const h = hue(c);
       expect(h >= 260 || h <= 60, `hue ${h} at ${i}`).toBe(true); // purple → magenta → orange → yellow
-      for (const p of indigo) expect(Math.hypot(c[0]! - p[0], c[1]! - p[1], c[2]! - p[2])).toBeGreaterThan(55);
+      for (const p of bands) expect(Math.hypot(c[0]! - p[0], c[1]! - p[1], c[2]! - p[2])).toBeGreaterThan(55);
     }
     expect(heatRgb(1)[0]).toBeGreaterThan(heatRgb(1)[2]); // ends warm yellow
     expect(HEAT_STOPS[HEAT_STOPS.length - 1]![1]).toBeGreaterThan(240);
     expect(heatAlpha(0)).toBe(0);
     expect(heatAlpha(0.3)).toBeLessThan(heatAlpha(0.6));
     expect(heatAlpha(1)).toBeLessThanOrEqual(0.6); // page underneath stays readable
-    for (const p of PREDICTION_INDIGO) expect(RECORDED_CSS.toLowerCase()).not.toContain(p);
+    for (const p of PREDICTION_BANDS) expect(RECORDED_CSS.toLowerCase()).not.toContain(p);
     expect(OVERLAY_CSS).not.toMatch(/rgb\(252, 211, 77\)/); // and Predicted CSS never carries the heat ramp
   });
 
@@ -493,7 +565,8 @@ describe('Recorded runtime + protocol', () => {
     await vi.waitFor(() => expect(rt.state().session.state).toBe('ready'));
 
     const s = rt.state();
-    expect(s.recorded).toEqual({ page: 1, pageCount: 2, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: true });
+    expect(s.recorded).toMatchObject({ page: 1, pageCount: 2, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: true });
+    expect(typeof s.recorded!.layoutChanged).toBe("boolean");
     rt.call('RUN_PREDICTION', { source: 'sidepanel' });
     rt.call('SET_INTERACTION_VIEW', { view: 'predicted' });
     h.predicted.length = 0;

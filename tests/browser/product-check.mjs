@@ -81,11 +81,10 @@ try {
   widths.overview = await noHScroll();
   await shot('overview');
   const navLabels = await panel.eval(`[...document.querySelectorAll('[role="tablist"][aria-label="UX HeatGrid sections"] [role="tab"]')].map((t) => t.textContent)`);
-  const cards = await panel.eval(`[...document.querySelectorAll('.mode')].map((c) => c.getAttribute('aria-label'))`);
+  const cards = await panel.eval(`[...document.querySelectorAll('.mode')].map((c) => document.getElementById(c.getAttribute('aria-labelledby'))?.textContent)`);
   check('1/2. Overview: tabs Overview · Predict · Record; page identity + Predict + Record panels; no Coach', JSON.stringify(navLabels) === '["Overview","Predict","Record"]' && JSON.stringify(cards) === '["Predict","Record"]' && (await panel.eval(`!!document.querySelector('.page-id .page-title')`)) && !/coach|finding|Developer details|Analysis JSON|Raw state|Run analyzer/i.test(ov), { navLabels, cards });
 
   // Predict → overlay shown on the page; the panel stays on Overview.
-  await panel.click('button[data-key="ov-predict"]');
   await panel.click('button[data-key="ov-start-predict"]');
   const predicted = await until(async () => { const s = await state(); return s?.interactionView === 'predicted' && (await panel.eval(`!!document.querySelector('#ov-predict-report')`)) && s; });
   const stayedOnOverview = (await panel.eval(`document.querySelector('[data-key="nav-overview"]').getAttribute('aria-selected')`)) === 'true';
@@ -124,8 +123,7 @@ try {
 
   // Back to Overview → Record.
   await panel.click('button[data-key="nav-overview"]');
-  await until(() => panel.eval(`!!document.querySelector('[data-key="ov-predict"]')`));
-  await panel.click('button[data-key="ov-record"]');
+  await until(() => panel.eval(`!!document.querySelector('[data-key="ov-start-record"]')`));
   await panel.click('button[data-key="ov-start-record"]');
   const rec = await until(async () => { const s = await state(); return s?.session.state === 'recording' && s; });
   await sleep(1200);
@@ -145,7 +143,7 @@ try {
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 2, mobile: false });
   await page.screenshot({ path: `${SHOTS}/p9-page-recording.png` });
   check('4. Record hides the Prediction visualization', rec?.interactionView === 'none' && (await diag('overlayStats')) !== undefined);
-  check('5. recording state is clear (Recording · elapsed · clicks · Stop)', /Recording/.test(barText) && /\d+s/.test(barText) && /click/i.test(barText) && /Stop/.test(barText), barText);
+  check('5. recording state is clear on Overview (elapsed · clicks · Stop; no separate "Recording" line)', !/Recording/.test(barText) && /\d+s/.test(barText) && /click/i.test(barText) && /Stop/.test(barText), barText);
 
   // UI tab switches during recording never stop, restart or reset the session.
   const sid = rec?.session.sessionId;
@@ -182,13 +180,12 @@ try {
   for (const width of [320, 400, 560]) {
     await panel.send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 2, mobile: false });
     await sleep(120);
-    liveRecordWidths[width] = await panel.eval(`document.querySelector('[data-key="ov-record"]')?.getAttribute('aria-expanded') === 'true' && !!document.querySelector('#ov-record-report .live') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`);
+    liveRecordWidths[width] = await panel.eval(`!!document.querySelector('#ov-record-report .live') && document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1`);
   }
   await panel.send('Emulation.setDeviceMetricsOverride', { width: 320, height: 900, deviceScaleFactor: 2, mobile: false });
   check('5b. Overview Record stays expanded through page interaction and navigation', Object.values(liveRecordWidths).every(Boolean), liveRecordWidths);
 
   // Stop → Recorded.
-  if (!(await panel.eval(`!![...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Stop')`))) await panel.click('button[data-key="ov-record"]');
   await panel.click('Stop');
   const done = await until(async () => { const s = await state(); return s?.session.state === 'ready' && s.interactionView === 'recorded' && s; });
   const stopStayed = (await panel.eval(`document.querySelector('[data-key="nav-overview"]').getAttribute('aria-selected')`)) === 'true';
@@ -288,9 +285,9 @@ try {
           await sleep(120);
           await shot(`overview-400-${scheme}-${state}`);
         };
-        await hoverShot('[data-key="ov-predict"]', 'card-hover');
+        await hoverShot('[data-key="nav-predict"]', 'segment-hover');
         await hoverShot('[data-key="ov-start-predict"]', 'start-hover');
-        await hoverShot('.mode[data-kind="predicted"] .mode-head > .chev', 'chevron-hover');
+        await hoverShot('[data-key="theme"]', 'theme-hover');
         await panel.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1, y: 1 });
       }
     }
@@ -391,7 +388,7 @@ try {
   await h.bs.send('Target.closeTarget', { targetId: panelTarget.targetId });
   await until(async () => !(await h.targets()).some((t) => t.targetId === panelTarget.targetId));
   const panel2 = await h.triggerAction(page);
-  const reopened = await until(() => panel2.eval(`!!document.querySelector('[data-key="ov-predict"]') || !!document.querySelector('.summary')`));
+  const reopened = await until(() => panel2.eval(`!!document.querySelector('[data-key="ov-start-predict"]') || !!document.querySelector('.summary')`));
   check('19. side panel reopen restores the prediction summary', !!reopened, reopened ? undefined : { text: (await panel2.text().catch(() => '')).slice(0, 300), state: (await state())?.prediction.state ?? null });
 
   // 20. Back / forward: no recording active → runtime ends with the document; panel stays sane.

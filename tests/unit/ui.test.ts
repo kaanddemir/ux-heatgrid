@@ -12,7 +12,7 @@ import type { TabSnapshot } from '../../src/shared/model';
 import { makeEvent, makeRequest, type RequestEnvelope, type Response } from '../../src/shared/protocol';
 import { createPanelApp, type PanelApi } from '../../src/ui/sidepanel/app';
 import { INITIAL_NAV, SECTIONS, formatDuration, route } from '../../src/ui/sidepanel/model';
-import { recordedBody, recordedFilters, recordedHeadAction, recordedWarnings } from '../../src/ui/sidepanel/recordedView';
+import { pageName, recordedBody, recordedFilters, recordedHeadAction, recordedWarnings } from '../../src/ui/sidepanel/recordedView';
 import { button, dismissPopover, filterPopover, noticePanel } from '../../src/ui/sidepanel/ui';
 import { cleanSubject } from '../../src/ui/shared/regionLabel';
 import { fixtureReader, mount } from '../helpers/fixtureReader';
@@ -38,7 +38,7 @@ describe('Panel navigation model', () => {
     expect(p).toEqual({ nav: { section: 'predict' }, intent: null });
     const processing = route(INITIAL_NAV, 'stop', snapshot({ session: { state: 'processing' } }));
     expect(processing).toEqual({ nav: INITIAL_NAV, intent: 'stop' }); // real state, no fake progress
-    const rec = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: true };
+    const rec = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: true, layoutChanged: false };
     expect(route(INITIAL_NAV, 'stop', snapshot({ session: { state: 'ready' }, recorded: rec })).nav).toEqual({ section: 'record' });
     expect(route(INITIAL_NAV, 'stop', snapshot({ session: { state: 'error' } }))).toEqual({ nav: INITIAL_NAV, intent: null });
   });
@@ -63,7 +63,7 @@ describe('Unified warning notice', () => {
     let notice = renderNotice();
     expect(notice.dataset.severity).toBe('critical');
     expect(notice.querySelector('.notice-message')!.textContent).toBe('Recording interrupted');
-    expect(notice.querySelector('.notice-count')!.textContent).toBe('2 issues detected');
+    expect(notice.querySelector('.notice-count')!.textContent).toBe('1 more'); // compact, on the message line
     notice.querySelector<HTMLButtonElement>('.notice-action button')!.click();
     expect([recovered, toggles]).toEqual([1, 0]);
     notice.querySelector<HTMLButtonElement>('.notice-toggle')!.click();
@@ -265,22 +265,23 @@ describe('Panel app', () => {
     expect(root.querySelector('[data-key="ov-start-record"]')!.hasAttribute('disabled')).toBe(false); // not left busy
   });
 
-  it('opens on Overview: page identity + Predict + Record panels, collapsed; no Coach, no developer UI', async () => {
+  it('opens on Overview: page identity + Predict + Record sections, both open; no Coach, no developer UI', async () => {
     const { app, root, settle } = setup();
     await app.refresh();
     await settle();
     const tabs = [...root.querySelectorAll('[role="tablist"][aria-label="UX HeatGrid sections"] [role="tab"]')];
     expect(tabs.map((t) => [t.textContent, t.getAttribute('aria-selected')])).toEqual([['Overview', 'true'], ['Predict', 'false'], ['Record', 'false']]);
     expect(root.querySelector('.page-id .page-host')!.textContent).toBe('example.test');
-    const toggles = [...root.querySelectorAll<HTMLButtonElement>('button.mode-toggle')];
-    expect(toggles.map((a) => a.dataset.key)).toEqual(['ov-predict', 'ov-record']);
-    expect(toggles.map((a) => a.getAttribute('aria-label'))).toEqual(['Predict', 'Record']);
-    expect([...root.querySelectorAll('.mode-head .mode-title')].map((e) => e.textContent)).toEqual(['Predict', 'Record']);
-    expect(root.querySelectorAll('.modes > .mode')).toHaveLength(2); // one surface, two stacked sections
-    expect(root.querySelectorAll('.mode-head button')).toHaveLength(4); // toggle + action per head; no separate chevron button
-    expect(toggles.every((a) => a.getAttribute('aria-expanded') === 'false')).toBe(true);
+    expect(root.querySelector('button.mode-toggle, .mode [aria-expanded]:not(.help-btn)')).toBeNull(); // no section disclosure: both features are open
+    expect([...root.querySelectorAll('.mode-head h2.mode-title')].map((e) => e.textContent)).toEqual(['Predict', 'Record']);
+    expect([...root.querySelectorAll('.mode')].map((m) => root.querySelector(`#${m.getAttribute('aria-labelledby')}`)?.textContent)).toEqual(['Predict', 'Record']);
+    expect([...root.querySelectorAll('.mode-desc')].map((e) => e.textContent)).toEqual(['Estimated from page structure.', 'Capture a live session.']);
+    expect(root.querySelectorAll('.modes > .mode')).toHaveLength(2);
+    expect(root.querySelectorAll('.mode-head > .btn')).toHaveLength(2); // one primary action per head
+    expect([...root.querySelectorAll('.mode-title-row .help-btn')].map((b) => b.getAttribute('aria-label'))).toEqual(['About Predict', 'About Record']);
     expect([...root.querySelectorAll('.mode')].map((m) => m.getAttribute('data-kind'))).toEqual(['predicted', 'recorded']);
-    expect(root.querySelector('.mode-body')).toBeNull();
+    expect(root.querySelector('#ov-predict-report > .meta')!.textContent).toBe('No prediction yet.');
+    expect(root.querySelector('#ov-record-report > .meta')!.textContent).toBe('No recording yet.');
     expect(root.querySelector('[data-key="ov-start-predict"]')!.textContent).toBe('Start');
     expect(root.querySelector('[data-key="ov-start-record"]')!.textContent).toBe('Start');
     expect(root.textContent).not.toMatch(/coach|finding|interaction/i);
@@ -290,27 +291,17 @@ describe('Panel app', () => {
     expect([...root.querySelectorAll('button')].every((b) => b.type === 'button')).toBe(true);
   });
 
-  it('Predict panel only expands; Start runs without toggling the panel; full report opens the Predict tab', async () => {
+  it('Overview Start runs Predict in place and shows its summary; full report opens the Predict tab', async () => {
     const { app, root, settle, click, state, sent } = setup();
     await app.refresh();
-    sent.length = 0;
-    await click('ov-predict');
-    expect(sent).not.toContain('RUN_PREDICTION');
-    expect(root.querySelector('#ov-predict-report > .meta')!.textContent).toBe('No prediction yet.');
-    await click('ov-predict'); // collapse, then Start from the closed head
+    expect(sent).not.toContain('RUN_PREDICTION'); // opening Overview never runs anything
     await click('ov-start-predict');
     expect(app.inspect().nav).toEqual({ section: 'overview' });
     expect(state().interactionView).toBe('predicted');
-    expect(root.querySelector('[data-key="ov-predict"]')!.getAttribute('aria-expanded')).toBe('true'); // Start opens; the click never bubbled into a toggle
     // Overview uses the same summary component as the Predict screen.
     expect(root.querySelector('#ov-predict-report .summary [data-band="high"]')).not.toBeNull();
     expect(root.querySelectorAll('#ov-predict-report .preview li').length).toBeGreaterThan(0);
-    // Panels are independent.
-    await click('ov-record');
-    expect(root.querySelector('#ov-predict-report')).not.toBeNull();
-    expect(root.querySelector('#ov-record-report')).not.toBeNull();
-    await click('ov-record');
-    expect(root.querySelector('#ov-predict-report')).not.toBeNull();
+    expect(root.querySelector('#ov-record-report > .meta')!.textContent).toBe('No recording yet.'); // Record untouched
     await click('ov-open-predict');
     expect(app.inspect().nav).toEqual({ section: 'predict' });
     expect(root.querySelector('[data-key="nav-predict"]')!.getAttribute('aria-selected')).toBe('true');
@@ -365,7 +356,7 @@ describe('Panel app', () => {
     expect(stop.textContent).toBe('Stop');
     expect(stop.classList.contains('is-stop')).toBe(true);
     const live = root.querySelector('#ov-record-report .live')!;
-    expect(live.querySelector('.live-status')!.textContent).toMatch(/Recording/);
+    expect(live.querySelector('.live-status')).toBeNull(); // Stop in the head already says it is recording
     expect([...live.querySelectorAll('.cell-label')].map((e) => e.textContent)).toEqual(['Duration', 'Clicks', 'Scroll']);
     expect(live.querySelector('.cell-value')!.textContent).toMatch(/^\d+s$/); // filled immediately, not blank
     expect(root.querySelector('[data-key="live-pill"]')).toBeNull(); // the live block is visible already
@@ -380,7 +371,7 @@ describe('Panel app', () => {
     await settle();
     await app.refresh();
     await settle();
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
+    expect(root.querySelector('#ov-record-report .live')).not.toBeNull();
     const sid = state().session.sessionId;
     tab('nav-predict').click();
     await settle();
@@ -388,6 +379,7 @@ describe('Panel app', () => {
     tab('nav-record').click();
     await settle();
     expect(heads(root)).toEqual(['ihead', 'live']); // same frame: head (Stop) · live block
+    expect(root.querySelector('.live-status')).toBeNull(); // no "Recording" line here either: Stop says it
     expect(root.querySelector('.ihead-actions [data-key="stop"]')).not.toBeNull();
     tab('nav-overview').click();
     await settle();
@@ -402,7 +394,10 @@ describe('Panel app', () => {
     expect(heads(root).filter((h) => h !== 'notice')).toEqual(['ihead', 'summary', 'groups', 'foot']); // identical frame to Predict
     expect(root.querySelector('.ihead-title')!.textContent).toBe('Record');
     expect([...root.querySelectorAll('.ihead-actions [data-key]')].map((e) => (e as HTMLElement).dataset.key)).toEqual(['rec-show', 'filter-toggle']);
-    expect([...root.querySelectorAll('.foot .btn')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-clear', 'rec-rerun']); // same footer as Predict
+    // One "Record again" at a time: on the layout warning when it shows, otherwise in the footer.
+    const layoutWarning = !!root.querySelector('[data-key="record-again-layout"]');
+    expect([...root.querySelectorAll('.foot .btn')].map((b) => (b as HTMLElement).dataset.key)).toEqual(layoutWarning ? ['rec-clear'] : ['rec-clear', 'rec-rerun']);
+    expect(root.querySelectorAll('[data-key="record-again-layout"], [data-key="rec-rerun"]').length).toBe(1);
     expect(root.textContent).not.toMatch(/Most hovered|In view, no interaction/); // nothing to list → hidden
     expect(root.querySelector('select')).toBeNull(); // single page: no page chrome
   });
@@ -426,25 +421,90 @@ describe('Panel app', () => {
     expect(sent.filter((t) => /^(RUN_|START_|STOP_|CLEAR_)/.test(t))).toEqual([]); // opening a tab never runs anything
   });
 
-  it('a recording started on the Record tab opens the Overview Record panel; a user collapse sticks', async () => {
+  it('a recording started on the Record tab shows live on Overview; the app-bar pill appears only on Predict', async () => {
     const { app, root, settle, click, tab, state } = setup();
     await app.refresh();
     tab('nav-record').click();
     await settle();
     await click('rec-start');
     expect(state().session.state).toBe('recording');
+    expect(root.querySelector('[data-key="live-pill"]')).toBeNull(); // Record shows the live block itself
     tab('nav-overview').click();
     await settle();
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('true');
-    await click('ov-record');
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('false');
-    expect(root.querySelector('[data-key="live-pill"]')).not.toBeNull(); // collapsed → status moves to the app bar
-    document.getElementById('b1')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(root.querySelector('#ov-record-report .live')).not.toBeNull();
+    expect(root.querySelector('[data-key="live-pill"]')).toBeNull();
+    tab('nav-predict').click();
     await settle();
-    await app.refresh();
-    await settle();
-    expect(root.querySelector('[data-key="ov-record"]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(root.querySelector('[data-key="live-pill"]')).not.toBeNull();
+    await click('live-pill');
+    expect(app.inspect().nav).toEqual({ section: 'record' });
     expect(state().session.state).toBe('recording');
+  });
+
+  it('help (?) beside Predict / Record headings: click toggles one sentence; Escape, outside click and tab change close it', async () => {
+    const { app, root, click, tab, settle } = setup();
+    await app.refresh();
+    const btn = (k: string) => root.querySelector<HTMLButtonElement>(`[data-key="${k}"]`)!;
+    const tip = (k: string) => root.querySelector<HTMLElement>(`#${btn(k).getAttribute('aria-controls')}`)!;
+    expect(btn('help-predict').getAttribute('aria-expanded')).toBe('false');
+    expect(tip('help-predict').hidden).toBe(true);
+    await click('help-predict');
+    expect(btn('help-predict').getAttribute('aria-expanded')).toBe('true');
+    expect(tip('help-predict').textContent).toBe('Predicts which page elements stand out visually, not actual user behavior.');
+    expect(tip('help-predict').getAttribute('role')).toBe('status'); // announced when it opens
+    await click('help-record'); // only one open at a time
+    expect(tip('help-predict').hidden).toBe(true);
+    expect(tip('help-record').textContent).toBe('Records your actual interactions on the page during a session.');
+    await click('help-record'); // second click closes
+    expect(tip('help-record').hidden).toBe(true);
+    await click('help-predict');
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(tip('help-predict').hidden).toBe(true);
+    await click('help-predict');
+    const navRecord = tab('nav-record');
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); // outside: closes…
+    expect(tip('help-predict').hidden).toBe(true);
+    expect(tab('nav-record')).toBe(navRecord); // …in place (no re-render), so a control being clicked still gets its click
+    navRecord.click();
+    await settle();
+    expect(app.inspect().nav).toEqual({ section: 'record' });
+    tab('nav-overview').click();
+    await settle();
+    // Same component on the Predict and Record screens' headings.
+    for (const [nav, key] of [['nav-predict', 'help-predict'], ['nav-record', 'help-record']] as const) {
+      tab(nav).click();
+      await settle();
+      expect(root.querySelector(`.ihead-main [data-key="${key}"]`)).not.toBeNull();
+    }
+    await click('help-record');
+    tab('nav-overview').click();
+    await settle();
+    expect(btn('help-record').getAttribute('aria-expanded')).toBe('false'); // tab change closes it
+  });
+
+  it('theme control: System → Light → Dark, applied to <html>, remembered, keyboard-reachable', async () => {
+    localStorage.removeItem('hg-theme');
+    delete document.documentElement.dataset.theme;
+    const { app, root, click } = setup();
+    await app.refresh();
+    const btn = () => root.querySelector<HTMLButtonElement>('.appbar [data-key="theme"]')!;
+    expect(btn().getAttribute('aria-label')).toBe('Theme: System. Switch to Light');
+    expect(btn().type).toBe('button');
+    expect(btn().parentElement!.lastElementChild).toBe(btn()); // far right of the app bar
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+    await click('theme');
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(localStorage.getItem('hg-theme')).toBe('light');
+    await click('theme');
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(btn().getAttribute('aria-label')).toBe('Theme: Dark. Switch to System');
+    expect(btn().dataset.key).toBe('theme'); // render() restores keyboard focus by data-key
+    const reopened = setup(); // a new panel reads the remembered choice
+    await reopened.app.refresh();
+    expect(reopened.root.querySelector('[data-key="theme"]')!.getAttribute('aria-label')).toBe('Theme: Dark. Switch to System');
+    await reopened.click('theme');
+    expect(document.documentElement.dataset.theme).toBeUndefined(); // System: follow the OS
+    expect(localStorage.getItem('hg-theme')).toBe('system');
   });
 
   it('band groups collapse from their heading; the choice survives navigation', async () => {
@@ -470,7 +530,29 @@ describe('Panel app', () => {
     expect(head().getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('stale prediction: one notice before the head, Run again, no duplicate Re-run, no automatic rerun', async () => {
+  it('feedback sits at the top of every page, never inside a section, and a failure is shown once', async () => {
+    const { app, root, settle, click, tab, state } = setup();
+    await app.refresh();
+    await click('ov-start-predict');
+    const s = state();
+    app.onEvent(makeEvent('STATE_CHANGED', { snapshot: { ...s, prediction: { ...s.prediction, state: 'stale', staleReason: 'dom-change' } } }), 1);
+    await settle();
+    expect(root.querySelector('main.view')!.firstElementChild!.matches('.notice')).toBe(true);
+    expect(root.querySelector('.mode .notice')).toBeNull(); // not inside the Predict section
+    expect(root.querySelector('.notice [data-key="ov-predict-again"]')).not.toBeNull();
+    const failed = { ...state(), session: { ...state().session, state: 'error' as const } };
+    app.onEvent(makeEvent('STATE_CHANGED', { snapshot: failed }), 1);
+    await settle();
+    expect(root.querySelectorAll('.notice')).toHaveLength(1); // stale + failure share one row ("1 more")
+    expect(root.querySelector('.notice')!.getAttribute('role')).toBe('alert');
+    expect(root.querySelector('.notice-message')!.textContent).toBe('Recording could not be processed.');
+    tab('nav-record').click();
+    await settle();
+    expect(root.querySelector('.notice')).toBeNull(); // Record shows the failure once: its empty state with Start recording
+    expect(root.querySelector('.empty-title')!.textContent).toBe('Recording could not be processed');
+  });
+
+  it('stale prediction: one notice at the top of the content, Run again, no duplicate Re-run, no automatic rerun', async () => {
     const { app, root, sent, settle, click, tab, state } = setup();
     await app.refresh();
     await click('ov-start-predict');
@@ -480,16 +562,41 @@ describe('Panel app', () => {
     sent.length = 0;
     app.onEvent(makeEvent('STATE_CHANGED', { snapshot: { ...s, prediction: { ...s.prediction, state: 'stale', staleReason: 'dom-change' } } }), 1);
     await settle();
-    expect(heads(root)[0]).toBe('notice');
-    const n = root.querySelector('.screen .notice[role="status"]')!;
-    expect(n.textContent).toContain('Page changed');
+    expect(root.querySelector('main.view')!.firstElementChild!.classList.contains('notice')).toBe(true); // directly under the navigation
+    const n = root.querySelector('main.view > .notice[role="status"]')!;
+    expect(n.textContent).toBe('Page changed since this prediction.Run again'); // one sentence + its action, no second line
     expect(n.querySelector('button')!.textContent).toBe('Run again');
-    expect(root.querySelectorAll('.screen .notice')).toHaveLength(1);
+    expect(root.querySelectorAll('.notice')).toHaveLength(1);
     expect(root.querySelector('[data-key="predict-rerun"]')).toBeNull();
     expect(sent).not.toContain('RUN_PREDICTION');
     root.querySelector<HTMLButtonElement>('.row-toggle')!.click();
     await settle();
-    expect(root.querySelector('.detail')!.textContent).toContain('Page changed — these reasons describe the earlier analysis');
+    expect(root.querySelector('.detail')!.textContent).toContain('Reasons are from before the page changed');
+    expect(root.textContent).not.toMatch(/[\u2013\u2014]/); // no en/em dashes in UI copy
+  });
+
+  it('expanded Predict detail: Band · Type · Confidence in equal columns (no Area); Why in Positive | Negative columns', async () => {
+    const { app, root, settle, click } = setup();
+    await app.refresh();
+    await click('ov-start-predict');
+    await click('nav-predict');
+    root.querySelector<HTMLButtonElement>('.row-toggle')!.click();
+    await settle();
+    const d = root.querySelector('.detail')!;
+    const grid = d.querySelector('.stat-grid')!;
+    expect([...grid.querySelectorAll('dt')].map((e) => e.textContent)).toEqual(['Band', 'Type', 'Confidence']);
+    expect(grid.getAttribute('data-n')).toBe('3');
+    expect(d.textContent).not.toMatch(/\bArea\b/);
+    const why = d.querySelector('.why')!;
+    const cols = [...why.querySelectorAll('.why-col')];
+    expect(cols.length).toBeGreaterThan(0);
+    for (const c of cols) {
+      const dir = c.getAttribute('data-dir');
+      expect(c.querySelector('.why-head')!.textContent).toBe(dir === 'raises' ? 'Positive' : 'Negative');
+      expect([...c.querySelectorAll('li')].every((li) => li.getAttribute('data-dir') === dir)).toBe(true); // each side lists only its own factors
+    }
+    expect(cols.map((c) => c.getAttribute('data-dir'))).toEqual(cols.length === 2 ? ['raises', 'lowers'] : [cols[0]!.getAttribute('data-dir')]);
+    expect(why.classList.contains('is-single')).toBe(cols.length === 1);
   });
 
   it('Predict filters: Band and Type narrow the list, count active, Reset clears; never run', async () => {
@@ -575,14 +682,16 @@ describe('Recorded multi-page view', () => {
     const snap = snapshot({ session: { state: 'ready' } });
     const noop = { onRecord() {}, onStop() {}, onClear() {}, onShowOnPage() {}, onLayers() {}, onPage() {}, onSelect() {}, onFocus() {} };
     const a = recordedBody({ snap, session, page: page({}), selected: null, note: null, busy: false }, noop);
-    expect([...a.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Page 1 of 2 · /pricing', 'Page 2 of 2 · /checkout']);
-    expect(recordedWarnings({ snap, session, page: page({}), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Page not open · map not drawn');
+    expect([...a.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Page 1 of 2: P', 'Page 2 of 2: C']); // page titles
+    expect(pageName({ path: '/', title: ' ' })).toBe('Home');
+    expect(pageName({ path: '/pricing', title: '' })).toBe('/pricing');
+    expect(recordedWarnings({ snap, session, page: page({}), selected: null, note: null, busy: false }).map((n) => n.message).join(' ')).toContain('Page not open, so its map isn’t shown.');
     expect(a.textContent).toMatch(/Pages\s*2/);
-    expect(a.querySelector('.page-context .caption')!.textContent).toBe('0s · 4 clicks · 50% scroll · 1 interacted'); // one line, not a second strip
+    expect([...a.querySelectorAll('.page-context .chip')].map((c) => c.textContent)).toEqual(['0s', '4 Clicks', '50% Scroll', '1 Interacted']); // quiet boxes, not a second metric strip
     expect(a.querySelectorAll('.summary')).toHaveLength(1);
     const closedPage = page({});
     const closedFilter = recordedFilters(
-      { snap: snapshot({ session: { state: 'ready' }, recorded: { page: 0, pageCount: 2, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: false } }), session, page: closedPage, selected: null, note: null, busy: false, filterOpen: true },
+      { snap: snapshot({ session: { state: 'ready' }, recorded: { page: 0, pageCount: 2, layers: { heatmap: true, clicks: true, scroll: true }, focusedElementId: null, pageOpen: false, layoutChanged: false } }), session, page: closedPage, selected: null, note: null, busy: false, filterOpen: true },
       closedPage,
       noop,
     )!;
@@ -617,7 +726,8 @@ describe('Record rows (shared inspector row)', () => {
     const holder = document.createElement('div');
     holder.append(recordedBody({ snap, session, page, selected: 7, note: null, busy: false }, noop));
     // Same row component as Predict: label · short meta · chevron; eye only on the open row.
-    expect([...holder.querySelectorAll('.row-line')].map((r) => [r.querySelector('.row-label')!.textContent, r.querySelector('.row-meta')!.textContent])).toEqual([['Work', '1 click · 1.3s hover'], ['Browse', '5.0s in view']]);
+    expect([...holder.querySelectorAll('.row-line')].map((r) => [r.querySelector('.row-label')!.textContent, r.querySelector('.row-meta')!.textContent])).toEqual([['Work', 'Link'], ['Browse', 'Link']]); // name · type only, like Predict
+    expect(holder.querySelector('.rows')!.textContent).not.toMatch(/click|hover|in view/); // activity only in the expanded detail
     expect([...holder.querySelectorAll('[aria-expanded="true"]')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['rec-mostInteracted-7']);
     expect(holder.querySelectorAll('.detail')).toHaveLength(1);
     expect(holder.querySelector('[data-key="rec-show-7"]')!.getAttribute('title')).toBe('Show on page');
@@ -629,7 +739,7 @@ describe('Record rows (shared inspector row)', () => {
     // Never reached / May not be clickable are not listed: no group, no coordinates.
     expect(holder.textContent).not.toMatch(/Never reached|Not reached|May not be clickable|Unlabelled element|542|305|\bpx\b/);
     // Filter = visualization settings only: three independent switches; activity groups stay visible.
-    const recorded = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: false, scroll: true }, focusedElementId: null, pageOpen: true };
+    const recorded = { page: 0, pageCount: 1, layers: { heatmap: true, clicks: false, scroll: true }, focusedElementId: null, pageOpen: true, layoutChanged: false };
     const model = { snap: snapshot({ session: { state: 'ready' }, recorded }), session, page, selected: null, note: null, busy: false, filterOpen: true };
     const changed: unknown[] = [];
     const filter = recordedFilters(model, page, { ...noop, onLayers: (l) => void changed.push(l) })!;
@@ -701,8 +811,27 @@ describe('side-panel stylesheet', () => {
       return 0.2126 * rgb[0]! + 0.7152 * rgb[1]! + 0.0722 * rgb[2]!;
     };
     const contrastWithWhite = (hex: string): number => 1.05 / (luminance(hex) + 0.05);
-    for (const name of ['pred-action', 'pred-action-hover', 'pred-action-pressed', 'heat-action', 'heat-action-hover', 'heat-action-pressed', 'neutral-action', 'neutral-action-hover', 'neutral-action-pressed']) {
+    for (const name of ['brand-action', 'brand-action-hover', 'brand-action-pressed', 'neutral-action', 'neutral-action-hover', 'neutral-action-pressed']) {
       expect(contrastWithWhite(token(name)), name).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe('Record pages chip', () => {
+  it('shows "N pages" beside Stop only for multi-page recordings', async () => {
+    const { pagesChip } = await import('../../src/ui/sidepanel/recordedView');
+    expect(pagesChip(1)).toBeNull();
+    const chip = pagesChip(2)!;
+    expect(chip.className).toBe('chip');
+    expect(chip.textContent).toBe('2 pages');
+  });
+});
+
+describe('cleanSubject', () => {
+  it('drops new-tab hints and trailing arrows, including named destinations', async () => {
+    const { cleanSubject } = await import('../../src/ui/shared/regionLabel');
+    expect(cleanSubject('GitHub , opens in a new tab ↗')).toBe('GitHub');
+    expect(cleanSubject('Add to Chrome , opens the Chrome Web Store in a new tab ↗')).toBe('Add to Chrome');
+    expect(cleanSubject('Browser Extensions')).toBe('Browser Extensions');
   });
 });

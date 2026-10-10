@@ -4,6 +4,10 @@
  */
 import { attachPanel, ensureRuntime, onEvent, request } from '../shared/client';
 import { createPanelApp } from './app';
+import { applyTheme, readTheme } from './theme';
+
+// Before anything renders: the remembered theme, so the panel never flashes the other one.
+applyTheme(document, readTheme(document));
 
 const root = document.getElementById('app')!;
 let windowId: number | null = null;

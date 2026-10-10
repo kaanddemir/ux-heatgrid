@@ -2,15 +2,25 @@
   "name": "ux-heatgrid",
   "version": "2.0.0",
   "private": true,
-  "description": "HeatGrid — Predict and Record page interactions in a Chrome side panel",
+  "description": "UX HeatGrid: Predict and Record page interactions in a Chrome side panel",
   "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --watch",
+    "verify": "node scripts/verify-dist.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "check": "npm run typecheck && npm run test && npm run build && npm run verify",
+    "test:browser": "npm run build && node tests/browser/product-check.mjs",
+    "test:browser:continuity": "npm run build && node tests/browser/continuity-check.mjs",
+    "test:browser:validate": "npm run build && node tests/browser/validate.mjs",
+    "test:sites": "npm run build && node tests/browser/real-sites.mjs",
+    "test:sites:recorded": "npm run build && node tests/browser/recorded-real.mjs",
+    "test:release": "npm run check && node tests/browser/product-check.mjs && node tests/browser/continuity-check.mjs && node tests/browser/validate.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.287",

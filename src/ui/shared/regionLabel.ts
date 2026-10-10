@@ -15,9 +15,12 @@ export function meaningfulRegion(label: string | null | undefined): string | nul
 
 /** Subject name for display: drops link-hint noise ("opens in a new tab", trailing ↗). */
 export function cleanSubject(label: string): string {
+  // Arrow first: it usually trails the hint ("GitHub, opens in a new tab ↗"). The hint may name the
+  // destination ("opens the Chrome Web Store in a new tab").
   return (
     label
-      .replace(/[,\s]*[(\[]?\s*opens in (a )?new (tab|window)\s*[)\]]?\s*$/i, '')
+      .replace(/[\s]*[↗→⧉]+\s*$/u, '')
+      .replace(/[,\s]*[(\[]?\s*opens\b[^,()[\]]*?\bin (a )?new (tab|window)\s*[)\]]?\s*$/i, '')
       .replace(/[\s]*[↗→⧉]+\s*$/u, '')
       .trim() || label
   );

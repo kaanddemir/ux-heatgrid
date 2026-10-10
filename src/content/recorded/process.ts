@@ -13,14 +13,14 @@
  * processed exactly like the current one. Rendering lives in overlay/recorded.ts.
  */
 import type { PageCaptureSegment, RecordingSessionResult } from '../recorder/segment';
-import { KERNEL_RADIUS, REPROJECT_UNCERTAIN_SHARE } from './config';
+import { CLICK_ANCHOR_MS, KERNEL_RADIUS, LAYOUT_ANCHOR_MAX, REPROJECT_UNCERTAIN_SHARE } from './config';
 import { addArea, addPoint, cellSizeFor, emptyGrid, gridTotal, type DensityGrid, type RootExtent } from './density';
 import { buildLists } from './lists';
 import { clusterClicks, maybeNotClickableSpots } from './markers';
 import { packDensity, packedBytes, upperBound } from './normalize';
 import { reprojectPointer, type RectOf } from './reproject';
 import { smoothGrid } from './smooth';
-import type { RecordedLimitationCode, RecordedPageResult, RecordedSessionResult } from './types';
+import type { LayoutAnchor, RecordedLimitationCode, RecordedPageResult, RecordedSessionResult } from './types';
 
 const perf = (): number => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -69,6 +69,32 @@ export function densityGrids(seg: PageCaptureSegment, xs: ArrayLike<number>, ys:
     }
   }
   return [...grids.values()];
+}
+
+/**
+ * The controls that explain most of the map (anchored pointer dwell + clicks), with their rect at
+ * Stop. Empty without live geometry: other documents cannot be compared with the open page.
+ */
+export function layoutAnchors(seg: PageCaptureSegment, rectOf: RectOf | null): LayoutAnchor[] {
+  if (!rectOf) return [];
+  const docId = seg.scroll.roots.find((r) => r.kind === 'document')?.rootId ?? 0;
+  const weight = new Map<string, { elementRef: number; rootId: number; weight: number }>();
+  const add = (elementRef: number, rootId: number, w: number): void => {
+    const key = `${elementRef}:${rootId}`;
+    const e = weight.get(key);
+    if (e) e.weight += w;
+    else weight.set(key, { elementRef, rootId, weight: w });
+  };
+  const p = seg.pointer;
+  for (let i = 0; i < p.count; i++) if (p.elementRef[i] && p.anchorX[i] !== null) add(p.elementRef[i]!, p.rootId[i]!, p.weightMs[i]!);
+  for (const c of seg.clicks) if (c.elementRef && c.x !== undefined) add(c.elementRef, c.rootId ?? docId, CLICK_ANCHOR_MS);
+  const out: LayoutAnchor[] = [];
+  for (const a of [...weight.values()].sort((x, y) => y.weight - x.weight || x.elementRef - y.elementRef)) {
+    if (out.length >= LAYOUT_ANCHOR_MAX) break;
+    const r = rectOf(a.elementRef, a.rootId);
+    if (r && r.width > 0 && r.height > 0) out.push({ ...a, x: r.x, y: r.y, width: r.width, height: r.height, weight: Math.round(a.weight) });
+  }
+  return out;
 }
 
 export function processPage(seg: PageCaptureSegment, opts: { local: boolean; rectOf: RectOf | null }): RecordedPageResult {
@@ -121,6 +147,7 @@ export function processPage(seg: PageCaptureSegment, opts: { local: boolean; rec
       maybeNotClickable: seg.clicks.filter((c) => c.interactive === 'maybe-not').length,
     },
     reprojection: stats,
+    layoutAnchors: layoutAnchors(seg, opts.local ? opts.rectOf : null),
     limitations: [...new Set(limitations)],
     timings: { processMs: Math.round((perf() - t0) * 100) / 100 },
   };

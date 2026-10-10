@@ -13,7 +13,6 @@
   <a href="https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn"><b>Install from the Chrome Web Store</b></a>
 </p>
 
-
 ## How it works
 
 1. Open any web page and click the **UX HeatGrid** icon in the Chrome toolbar. The side panel opens.
@@ -23,18 +22,17 @@
 
 ## Predict
 
-
 Predict ranks every button, link and control on the page into **High**, **Medium** and **Low** structural prominence. It looks at size, position, visual style, text contrast, nearby competing controls and page context. No recording is needed.
 
 - Results grouped by band, with filters for band and control type
-- **Why** reasons, page area and confidence for every element
+- **Why**: Positive and Negative factors, each explained from what was measured (for example the control's size relative to others, its contrast ratio or the number of nearby controls)
+- **Confidence** says how settled the band is: whether something that could not be measured, or a nearby band threshold, could change it. It is not a second prominence score
 - **Show on page** outlines the controls by band, with an on-page legend and filter
 - Marks results as stale when the page changes, with **Re-run** and **Reset**
 
 Predict is a structural estimate of prominence. It does not forecast real clicks or user attention.
 
 ## Record
-
 
 Record captures your own session on the page and turns it into a report and an on-page map.
 
@@ -48,14 +46,13 @@ A recording describes your session in your browser, not the behaviour of a site'
 
 ## Inspect
 
-
 Expand any result to see the evidence behind it: the structural reasons in Predict, or the measured clicks, hover, focus and time in view in Record. The matching element is highlighted on the live page.
 
 ## Installation
 
 **From the Chrome Web Store:** open [UX HeatGrid on the Chrome Web Store](https://chromewebstore.google.com/detail/ux-heatgrid/apdgicimbpoimklcanijmfbpfkekiajn) and choose **Add to Chrome**.
 
-**From source** (Chrome 116 or newer, Node.js 18 or newer):
+**From source** (Chrome 116 or newer, Node.js 22.12 or newer):
 
 ```bash
 npm install
@@ -90,12 +87,28 @@ Read the full [Privacy Policy](PRIVACY_POLICY.md).
 ## Development
 
 ```bash
-npm run dev         # rebuild dist on every change
-npm test            # unit tests
-npm run check       # typecheck, tests and production build
+npm run dev            # rebuild dist on every change
+npm test               # unit tests
+npm run check          # typecheck, unit tests, production build and dist verification
+npm run test:browser   # primary browser regression (Chrome for Testing)
+npm run test:release   # check, then the product, continuity and validation browser checks (no site sweeps)
 ```
 
-Browser regression checks are described in [tests/browser](tests/browser/README.md). Release notes are in the [Changelog](CHANGELOG.md).
+Individual steps are also available as `npm run typecheck`, `npm run build` and `npm run verify`. Browser checks need Playwright and Chrome for Testing installed outside the project; see [tests/browser](tests/browser/README.md) for setup and the other suites. Release notes are in the [Changelog](CHANGELOG.md).
+
+## Project structure
+
+```text
+src/background/   service worker and session recording store
+src/content/      injected runtime: analyzer, Predict, Record and on-page overlays
+src/shared/       messaging protocol, shared model and constants
+src/ui/           side panel, shared rendering, icons and design tokens
+scripts/          production build and dist verification
+tests/unit/       unit and DOM tests, with fixtures/ and helpers/
+tests/browser/    real Chrome checks, fixtures and site sweeps
+icons/            extension icons
+assets/brand/     icon SVG masters and the icon renderer
+```
 
 ## License
 

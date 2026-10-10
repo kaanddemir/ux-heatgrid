@@ -31,6 +31,9 @@ export class ClickTracker {
     const doc = this.ctx.win.document;
     if (!target || target === doc.documentElement || target === doc.body) return; // empty background
     this.ctx.input(t);
+    // A click on a <label> is followed by a trusted click the browser forwards to its control:
+    // record that one (it resolves to the control), not both.
+    if (forwardsToControl(path)) return;
     const control = this.ctx.resolver.controlFor(target);
     const activation = e.detail === 0;
     const pointerType = (e as PointerEvent).pointerType || undefined;
@@ -84,4 +87,21 @@ export class ClickTracker {
   resetFocus(): void {
     this.lastFocusId = null;
   }
+}
+
+/** Interactive content inside a label keeps its own click (the label does not forward it). */
+const OWN_CLICK = 'a[href],button,input,select,textarea,summary,[contenteditable]';
+
+/** True when this click lands on a <label> whose enabled control will receive a forwarded click. */
+export function forwardsToControl(path: readonly EventTarget[]): boolean {
+  for (const node of path) {
+    const el = asElement(node);
+    if (!el) continue;
+    if (el.tagName === 'LABEL') {
+      const control = (el as HTMLLabelElement).control;
+      return !!control && !path.includes(control) && !control.matches(':disabled');
+    }
+    if (el.matches(OWN_CLICK)) return false;
+  }
+  return false;
 }

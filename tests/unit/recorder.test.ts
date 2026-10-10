@@ -276,6 +276,22 @@ describe('clicks and activation', () => {
     expect(r.stat(c, 'a').clicks).toBe(1);
   });
 
+  it('a click on a <label> is recorded once, on its control (not also on the label)', () => {
+    const r = track(rig({ html: `<main data-rect="0 0 1280 2400">
+      <label id="lab" data-rect="100 100 200 30"><input id="cb" type="checkbox" data-rect="100 105 20 20"> <span id="lt" data-rect="125 105 100 20">Subscribe</span></label>
+      <label id="off" for="dis" data-rect="100 200 200 30">Off</label><input id="dis" type="checkbox" disabled data-rect="320 205 20 20">
+      <label id="wl" data-rect="100 300 300 30">Terms <a id="tl" href="/t" data-rect="150 305 60 20">link</a> <input id="cb2" type="checkbox" data-rect="250 305 20 20"></label>
+    </main>` }));
+    r.click(r.$('lt'), { clientX: 150, clientY: 115 });
+    r.click(r.$('cb'), { clientX: 150, clientY: 115 }); // the browser's forwarded click
+    r.click(r.$('off'), { clientX: 150, clientY: 215 }); // disabled control: no forwarded click follows
+    r.click(r.$('tl'), { clientX: 170, clientY: 315 }); // a link inside a label keeps its own click
+    const c = r.rec.stop();
+    expect(c.clicks.map((x) => x.elementRef ?? null)).toEqual([r.idOf('cb'), null, r.idOf('tl')]);
+    expect(c.clicks[0]).toMatchObject({ x: 150, y: 115 });
+    expect(r.stat(c, 'cb').clicks).toBe(1);
+  });
+
   it('keyboard activation (detail 0) is recorded without coordinates', () => {
     const r = track(rig());
     r.$('b').dispatchEvent(trusted(new MouseEvent('click', { bubbles: true, detail: 0 })));

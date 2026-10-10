@@ -92,8 +92,25 @@ export function screen(kind: Kind, ...children: Kids): HTMLElement {
 }
 
 /** Inspector head: mode title (no subtitle) · trailing actions, on one line at every width. */
-export function screenHead(title: string, opts: { trailing?: HTMLElement | null } = {}): HTMLElement {
-  return el('div', { class: 'ihead' }, el('h1', { class: 'ihead-title', text: title }), opts.trailing ? el('div', { class: 'ihead-actions' }, opts.trailing) : null);
+export function screenHead(title: string, opts: { trailing?: HTMLElement | null; help?: HTMLElement | null } = {}): HTMLElement {
+  return el(
+    'div',
+    { class: 'ihead' },
+    el('div', { class: 'ihead-main' }, el('h1', { class: 'ihead-title', text: title }), opts.help ?? null),
+    opts.trailing ? el('div', { class: 'ihead-actions' }, opts.trailing) : null,
+  );
+}
+
+/**
+ * Help toggletip: a quiet (?) button next to a heading; clicking it shows one sentence in a small
+ * bubble below. Open state lives in the caller (re-renders keep it); Escape, a click outside or a
+ * second click close it. The bubble is a status region, so opening it is announced.
+ */
+export function helpTip(id: string, topic: string, text: string, open: boolean, onToggle: () => void): HTMLElement {
+  const tipId = `help-${id}`;
+  const b = el('button', { class: 'help-btn', attrs: { type: 'button', 'aria-label': `About ${topic}`, 'aria-expanded': String(open), 'aria-controls': tipId }, on: { click: (e) => (e.stopPropagation(), onToggle()) } }, icon('help'));
+  b.dataset.key = `help-${id}`;
+  return el('span', { class: 'help' }, b, el('span', { class: 'help-tip', attrs: { id: tipId, role: 'status', ...(open ? {} : { hidden: '' }) }, text: open ? text : '' }));
 }
 
 /** Inline action group (head actions, popover footers). */
@@ -119,6 +136,8 @@ export interface Cell {
   band?: string;
   /** Live cells are filled in place (recording ticks) without a re-render. */
   live?: (node: HTMLElement) => void;
+  /** Tooltip, only where the number alone could mislead. */
+  hint?: string;
 }
 
 /**
@@ -138,7 +157,7 @@ export function summary(label: string, cells: Array<Cell | null>, opts: { bar?: 
         const value = el('dd', { class: 'cell-value', text: c.value });
         c.live?.(value);
         // dt before dd (valid list); CSS stacks the value on top.
-        return el('div', { class: c.quiet ? 'cell is-quiet' : 'cell', attrs: c.band ? { 'data-band': c.band } : {} }, el('dt', { class: 'cell-label', text: c.label }), value);
+        return el('div', { class: c.quiet ? 'cell is-quiet' : 'cell', attrs: { ...(c.band ? { 'data-band': c.band } : {}), ...(c.hint ? { title: c.hint } : {}) } }, el('dt', { class: 'cell-label', text: c.label }), value);
       }),
     ),
     opts.caption ? el('p', { class: 'caption', text: opts.caption }) : null,
@@ -242,11 +261,14 @@ export function detailPart(label: string, ...children: Kids): HTMLElement {
 }
 
 /** Facts as a 2-column grid of label / value pairs (Predict structure, Record activity). */
-export function statGrid(label: string, rows: Array<[string, string] | null>): HTMLElement {
+export function statGrid(label: string, rows: Array<[string, string] | [string, string, string] | null>): HTMLElement {
+  const shown = rows.filter((r): r is [string, string] | [string, string, string] => !!r);
+  // data-n lets the grid use equal columns for its actual count (3 facts → 3 columns, never 2 + 1).
   return el(
     'dl',
-    { class: 'stat-grid', attrs: { 'aria-label': label } },
-    ...rows.filter((r): r is [string, string] => !!r).map(([k, v]) => el('div', { class: 'stat' }, el('dt', { text: k }), el('dd', { text: v }))),
+    { class: 'stat-grid', attrs: { 'aria-label': label, 'data-n': String(shown.length) } },
+    // Optional third entry: a tooltip explaining what the fact means.
+    ...shown.map(([k, v, hint]) => el('div', { class: 'stat', attrs: hint ? { title: hint } : {} }, el('dt', { text: k }), el('dd', { text: v }))),
   );
 }
 
@@ -400,6 +422,8 @@ export interface NoticeIssue {
 }
 
 const ISSUE_PRIORITY: Record<IssueSeverity, number> = { critical: 0, action: 1, warning: 2, info: 3 };
+/** Tone is never colour alone: each severity has its own icon shape (as in ReadScore). */
+const ISSUE_ICON: Record<IssueSeverity, IconName> = { critical: 'error', action: 'warn', warning: 'warn', info: 'info' };
 
 /**
  * The single warning surface shared by Predict and Record. One issue is a compact row; multiple
@@ -428,7 +452,7 @@ export function noticePanel(
     { class: 'notice-copy' },
     el('span', { class: 'notice-message', text: primary.message }),
     primary.detail ? el('span', { class: 'notice-detail', text: primary.detail }) : null,
-    multiple ? el('span', { class: 'notice-count', text: `${distinct.length} issues detected` }) : null,
+    multiple ? el('span', { class: 'notice-count', text: `${distinct.length - 1} more` }) : null,
   );
   const toggle = multiple
     ? el('button', { class: 'notice-toggle', attrs: { type: 'button', 'aria-expanded': String(expanded), 'aria-controls': bodyId, 'aria-label': `${expanded ? 'Collapse' : 'Expand'} ${distinct.length} issues` }, on: { click: () => opts.onExpandedChange?.(!expanded) } }, copy, icon('chevron', 'icon chev'))
@@ -438,9 +462,9 @@ export function noticePanel(
   return el(
     'section',
     { class: `notice is-${primary.severity}${expanded ? ' is-open' : ''}`, attrs },
-    el('div', { class: 'notice-head' }, icon(primary.severity === 'info' ? 'info' : 'warn'), toggle, primary.action ? el('span', { class: 'notice-action', on: { click: (event) => event.stopPropagation() } }, primary.action) : null),
+    el('div', { class: 'notice-head' }, icon(ISSUE_ICON[primary.severity]), toggle, primary.action ? el('span', { class: 'notice-action', on: { click: (event) => event.stopPropagation() } }, primary.action) : null),
     expanded
-      ? el('ul', { class: 'notice-list', attrs: { id: bodyId } }, ...distinct.slice(1).map((issue) => el('li', { attrs: { 'data-severity': issue.severity } }, icon(issue.severity === 'info' ? 'info' : 'warn'), el('span', {}, el('span', { class: 'notice-message', text: issue.message }), issue.detail ? el('span', { class: 'notice-detail', text: issue.detail }) : null), issue.action ? el('span', { class: 'notice-action' }, issue.action) : null)))
+      ? el('ul', { class: 'notice-list', attrs: { id: bodyId } }, ...distinct.slice(1).map((issue) => el('li', { attrs: { 'data-severity': issue.severity } }, icon(ISSUE_ICON[issue.severity]), el('span', {}, el('span', { class: 'notice-message', text: issue.message }), issue.detail ? el('span', { class: 'notice-detail', text: issue.detail }) : null), issue.action ? el('span', { class: 'notice-action' }, issue.action) : null)))
       : null,
   );
 }
